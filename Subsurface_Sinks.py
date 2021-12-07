@@ -837,7 +837,8 @@ class SubsurfaceSinks(FugModel):
         res.loc[:,'M_tot'] = 0
         
         #Give number of discretized compartments to params
-        params.loc['numc_disc','val'] = locsumm.loc[:,'Discrete'].sum()
+        #pdb.set_trace()
+        params.loc['numc_disc','val'] = locsumm.loc[numc,'Discrete'].sum()
         #lexsort outside the timeloop for better performance
         res = res.sort_index()
         #Start the time loop! If you are a future coder

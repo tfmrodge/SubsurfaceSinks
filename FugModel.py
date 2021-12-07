@@ -571,6 +571,7 @@ class FugModel(metaclass=ABCMeta):
         #Initialize transport matrix and RHS vector (inp)
         #pdb.set_trace()
         numcells = len(res.x) #This includes the non-discretized cell
+        #pdb.set_trace()
         numc_disc = int(params.val.numc_disc) #Number of discretized cells
         numc_bulk = len(numc) - numc_disc
         mat = np.zeros([numchems,numx*numc_disc+numc_bulk,numx*numc_disc+numc_bulk])
@@ -599,6 +600,7 @@ class FugModel(metaclass=ABCMeta):
             else: #For the other compartments the input is the source term less the value at time n
                 a_val, V_val, Z_val = 'a'+str(j+1) + '_t', 'V' + str(j+1), 'Z' + str(j+1)
                 #RHS of the equation is the source plus the mass at time n for compartment j
+                #pdb.set_trace()
                 inp[:,m_vals+j] += - dt * np.array(res.loc[res.dm,inp_val]).reshape(numchems,numx)\
                 - np.array(res.loc[res.dm,a_val]).reshape(numchems,numx)\
                 *np.array(res.loc[res.dm,Z_val]).reshape(numchems,numx)\

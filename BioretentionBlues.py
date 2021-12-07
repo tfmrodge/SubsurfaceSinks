@@ -456,6 +456,7 @@ class BCBlues(SubsurfaceSinks):
         #going to try a single unified water compartment, with velocities that 
         #change depending on the zone. Might mess some things up if drain zone is fast?
         #Change in pore water volume dVf at t
+        #pdb.set_trace()
         dVf = (Q26 + Q106 - Q610 - Q6_et)*dt
         res.loc['water','V'] += dVf
         #subsoil Saturation (in the water depth column) at t+1
@@ -519,6 +520,7 @@ class BCBlues(SubsurfaceSinks):
         res.loc['topsoil','FrnWat'] = Sss*res.Porosity['filter']
         res.loc['drain','FrnWat'] = res.V.drain_pores/res.V.drain
         #Calculate VFair for drain and subsoil zones based on saturation
+        #pdb.set_trace()
         res.loc['subsoil','Frnair'] = res.Porosity['filter'] - Sss*res.Porosity['filter']
         res.loc['topsoil','Frnair'] = res.Porosity['filter'] - Sss*res.Porosity['filter']
         res.loc['drain','Frnair'] = res.Porosity.drain - res.FrnWat.drain/res.Porosity.drain
