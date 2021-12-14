@@ -86,8 +86,11 @@ class BCBlues(SubsurfaceSinks):
             res_t[t] = res.copy(deep=True)
         res = pd.concat(res_t)
         #Add the 'time' column to the res dataframe
-        res.loc[:,'time'] = timeseries.loc[:,'time'].reindex(res.index,method = 'bfill')
-
+        #pdb.set_trace()
+        #Old way (worked in pandas XXXX) - this worked for everywhere that is currently the long dataframe/array formula.
+        #res.loc[:,'time'] = timeseries.loc[:,'time'].reindex(res.index,method = 'bfill')
+        res.loc[:,'time'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'time']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]        
         #Set up advection between compartments.
         #The non-discretized compartments don't need to worry about flow the same way - define a mask "discretized mask" or dm
         #Currently set up so that the drainage one is not-dm, rest are. 
@@ -96,60 +99,83 @@ class BCBlues(SubsurfaceSinks):
         res.loc[res.x==999,'dm'] = False
         #numx = res[res.dm].index.levels[1] #count 
         #Now, we are going to define the soil as a single compartment containing the topsoil and filter
-        res.loc[:,'maskts'] = res.x < timeseries.loc[(slice(None),'topsoil'),'Depth'].reindex(res.index,method = 'bfill')
+        #Assuming topsoil is same depth at all times.
+        res.loc[:,'maskts'] = res.x < timeseries.loc[(min(timeseries.index.levels[0]),'topsoil'),'Depth']
         res.loc[:,'maskss'] = (res.maskts ^ res.dm)
-        res.loc[res.maskts,'porositywater'] = timeseries.loc[(slice(None),'topsoil'),'Porosity'].reindex(res.index,method = 'bfill')
-        res.loc[res.maskss,'porositywater'] = timeseries.loc[(slice(None),'subsoil'),'Porosity']\
-        .reindex(res.index,method = 'bfill') #added so that porosity can vary with x
+        res.loc[res.maskts,'porositywater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'topsoil'),'Porosity']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]
+        res.loc[res.maskss,'porositywater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Porosity']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0] #added so that porosity can vary with x
         #Drainage zone
-        res.loc[(slice(None),numx[-1]+1),'porositywater'] = timeseries.loc[(slice(None),'drain'),'Porosity'].reindex(res.index,method = 'bfill')
+        res.loc[(slice(None),numx[-1]+1),'porositywater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Porosity']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0] #added so that porosity can vary with x
         #Now we define the flow area as the area of the compartment * porosity * mobile fraction water
-        res.loc[res.maskts,'Awater'] = timeseries.loc[(slice(None),'subsoil'),'Area'].reindex(res.index,method = 'bfill')\
-        * res.loc[res.maskts,'porositywater']* params.val.thetam #right now not worrying about having different areas
-        res.loc[res.maskss,'Awater'] = timeseries.loc[(slice(None),'subsoil'),'Area'].reindex(res.index,method = 'bfill')\
-        * res.loc[res.maskss,'porositywater']* params.val.thetam
+        res.loc[res.maskts,'Awater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'topsoil'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                                        * res.loc[res.maskts,'porositywater']* params.val.thetam #right now not worrying about having different areas
+        res.loc[res.maskss,'Awater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                                        * res.loc[res.maskss,'porositywater']* params.val.thetam
         #drainage
-        res.loc[(slice(None),numx[-1]+1),'Awater'] = timeseries.loc[(slice(None),'drain'),'Area'].reindex(res.index,method = 'bfill')\
-        * res.loc[(slice(None),numx[-1]+1),'porositywater']
+        res.loc[(slice(None),numx[-1]+1),'Awater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                                                    * res.loc[(slice(None),numx[-1]+1),'porositywater']
         #Now we calculate the volume of the soil
-        res.loc[res.dm,'Vsubsoil'] = (timeseries.loc[(slice(None),'subsoil'),'Area'].reindex(res.index,method = 'bfill')\
+        res.loc[res.dm,'Vsubsoil'] = (pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
         - res.loc[res.dm,'Awater'])*res.dx
-        res.loc[(slice(None),numx[-1]+1),'Vsubsoil'] =(timeseries.loc[(slice(None),'drain'),'Area'].reindex(res.index,method = 'bfill')\
+        res.loc[(slice(None),numx[-1]+1),'Vsubsoil'] =(pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
         - res.loc[(slice(None),numx[-1]+1),'Awater'])*res.dx
         res.loc[:,'V2'] = res.loc[:,'Vsubsoil'] #Limit soil sorption to surface
         #Subsoil area - surface area of contact with the water, based on the specific surface area per m³ soil and water
-        res.loc[res.dm,'Asubsoil'] = timeseries.loc[(slice(None),'subsoil'),'Area']\
-        .reindex(res.index,method = 'bfill')*res.dm*params.val.AF_soil
-        res.loc[(slice(None),numx[-1]+1),'Asubsoil'] = timeseries.loc[(slice(None),'drain'),'Area']\
-        .reindex(res.index,method = 'bfill')*params.val.AF_soil
+        res.loc[res.dm,'Asubsoil'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                                    *res.dm*params.val.AF_soil
+        res.loc[(slice(None),numx[-1]+1),'Asubsoil'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Area']),
+                                                           index=res.index.levels[0]).reindex(res.index,level=0)[0]*params.val.AF_soil
         #For the water compartment assume a linear flow gradient from Qin to Qout - so Q can be increasing or decreasing as we go
-        res.loc[res.dm,'Qwater'] = timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill')-\
-            (timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill')\
-                         -timeseries.loc[(slice(None),'water'),'Q_todrain'].reindex(res.index,method = 'bfill'))/L*res.x
-        Qslope = (timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill')\
-        - timeseries.loc[(slice(None),'water'),'Q_todrain'].reindex(res.index,method = 'bfill')\
-        +timeseries.loc[(slice(None),'drain'),'Q_towater'].reindex(res.index,method = 'bfill'))/L
-        res.loc[res.dm,'Qin'] = timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill')-\
+        res.loc[res.dm,'Qwater'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                    - (pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                                 index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                    - pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+                                 index=res.index.levels[0]).reindex(res.index,level=0)[0])/L*res.x
+        Qslope = (pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+        - pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+        +pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_towater']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0])/L
+        res.loc[res.dm,'Qin'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]-\
             Qslope*(res.x - res.dx/2)
         #Out of each cell
-        res.loc[res.dm,'Qout'] = timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill')-\
+        res.loc[res.dm,'Qout'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]-\
             Qslope*(res.x + res.dx/2)
         #Water out in last cell is flow to the drain, this is also water into the drain. Net change with capillary flow
-        res.loc[(slice(None),numx[-1]+1),'Qin'] = timeseries.loc[(slice(None),'water'),'Q_todrain'].reindex(res.index,method = 'bfill')\
-        -timeseries.loc[(slice(None),'drain'),'Q_towater'].reindex(res.index,method = 'bfill')
+        res.loc[(slice(None),numx[-1]+1),'Qin'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+        -pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_towater']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #We will put the flow going into the ponding zone into the non-discretized cell.
         #pdb.set_trace()
         if 'pond' in numc:    
-            res.loc[(slice(None),numx[-1]+2),'Qin'] = timeseries.loc[(slice(None),'pond'),'Q_in'].reindex(res.index,method = 'bfill')
+            res.loc[(slice(None),numx[-1]+2),'Qin'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_in']),
+                         index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #For the drainage compartment assume Qin = Qwater (it either exfiltrates or goes out the pipe)
         res.loc[(slice(None),numx[-1]+1),'Qwater'] = res.loc[(slice(None),numx[-1]+1),'Qin']
         #Assume ET flow from filter zone only, assume proportional to water flow
         #To calculate the proportion of ET flow in each cell, divide the total ETflow for the timestep
         #by the average of the inlet and outlet flows, then divide evenly across the x cells (i.e. divide by number of cells)
         #to get the proportion in each cell, and multiply by Qwater
-        ETprop = timeseries.loc[(slice(None),'water'),'QET'].reindex(res.index,method = 'bfill')/(\
-                         (timeseries.loc[(slice(None),'water'),'Q_todrain'].reindex(res.index,method = 'bfill')\
-                          +timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill'))/2)
+        ETprop = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'QET']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/(\
+                         (pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+                                      index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                          +pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                                       index=res.index.levels[0]).reindex(res.index,level=0)[0])/2)
         ETprop[np.isnan(ETprop)] = 0 #returns nan if there is no flow so replace with 0
         res.loc[res.dm,'Qet'] = ETprop/len(res.index.levels[1]) * res.Qwater
         res.loc[(slice(None),numx[-1]+1),'Qet'] = 0
@@ -159,16 +185,21 @@ class BCBlues(SubsurfaceSinks):
         res.loc[:,'Qetsubsoil'] = (1-params.val.froot_top)*res.Qet
         res.loc[:,'Qettopsoil'] = (params.val.froot_top)*res.Qet
         #This is exfiltration across the entire filter zone
-        exfprop = timeseries.loc[(slice(None),'water'),'Q_exf'].reindex(res.index,method = 'bfill')/(\
-                         (timeseries.loc[(slice(None),'water'),'Q_todrain'].reindex(res.index,method = 'bfill')\
-                          +timeseries.loc[(slice(None),'pond'),'Q_towater'].reindex(res.index,method = 'bfill'))/2)
+        exfprop = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_exf']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/(\
+                         (pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+                                      index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+                          +pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Q_towater']),
+                                       index=res.index.levels[0]).reindex(res.index,level=0)[0])/2)
         exfprop[np.isnan(exfprop)] = 0
         exfprop[np.isinf(exfprop)] = 0
         res.loc[res.dm,'Qwaterexf'] = exfprop/len(res.index.levels[1]) * res.Qwater #Amount of exfiltration from the system, for unlined systems
         #We will put the drainage zone exfiltration in the final drainage cell
-        res.loc[(slice(None),numx[-1]+1),'Qwaterexf'] = timeseries.loc[(slice(None),'drain'),'Q_exf'].reindex(res.index,method = 'bfill')
+        res.loc[(slice(None),numx[-1]+1),'Qwaterexf'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_exf']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #Pipe flow is the end of the system
-        res.loc[(slice(None),numx[-1]+1),'Qout'] = timeseries.loc[(slice(None),'drain'),'Q_out'].reindex(res.index,method = 'bfill')
+        res.loc[(slice(None),numx[-1]+1),'Qout'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_out']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #If we want more capillary rise than drain zone to filter - currently just net flow is recored.
         res.loc[res.dm,'Qcap'] = 0 #
         #Then water volume and velocity
@@ -177,7 +208,7 @@ class BCBlues(SubsurfaceSinks):
         
         #Matrix solution to volumes. Changed from running through each t to running through each x, hopefully faster.
         #NOTE THAT THIS USES LOTS OF RAM!! - basically uses another couple of GB.
-        #A slower solution would do better.
+        #A slower solution would do better RAM-wise
         numt = len(res.index.levels[0])
         mat = np.zeros([max(numx)+1,numt,numt],dtype=np.int8)
         inp = np.zeros([max(numx)+1,numt])
@@ -211,16 +242,18 @@ class BCBlues(SubsurfaceSinks):
                        -res.loc[(t,numx),'Qwaterexf']-res.loc[(t,numx),'Qout'])*np.array(dt[t])                                        
         '''
         #Volume
-        res.loc[(slice(None),numx[-1]+1),'V1'] =  timeseries.loc[(slice(None),'drain_pores'),'V'].reindex(res.index,method = 'bfill')
-        res.loc[:,'Vwater'] = res.loc[:,'V1'] #Bad code but who cares!
+        res.loc[(slice(None),numx[-1]+1),'V1'] =  pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain_pores'),'V']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
+        res.loc[:,'Vwater'] = res.loc[:,'V1'] #
 
         #Velocity
         res.loc[:,'v1'] = res.Qwater/res.Awater #velocity [L/T] at every x
         #Root volumes & area based off of soil volume fraction.
-        res.loc[res.dm,'Vroot'] = params.val.VFroot*timeseries.loc[(slice(None),'subsoil'),'Area']\
-        .reindex(res.index,method = 'bfill')/len(res.index.levels[0])  #Total root volume per m² ground area
-        res.loc[res.dm,'Aroot'] = params.val.Aroot*timeseries.loc[(slice(None),'subsoil'),'Area']\
-        .reindex(res.index,method = 'bfill')/len(res.index.levels[0]) #Total root area per m² ground area
+        
+        res.loc[res.dm,'Vroot'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/res.loc[(slice(10),slice(None)),'dm'].sum()  #Total root volume per m² ground area
+        res.loc[res.dm,'Aroot'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/len(res.index.levels[0]) #Total root area per m² ground area
         #Don't forget your drainage area - assume roots do not go in the drainage zone
         res.loc[(slice(None),numx[-1]+1),'Vroot'] = 0 #Total root volume per m² ground area
         res.loc[(slice(None),numx[-1]+1),'Aroot'] = 0 #Total root area per m² ground area        
@@ -258,35 +291,46 @@ class BCBlues(SubsurfaceSinks):
                     mask = res.dm
                 else:#Other compartments aren't discretized
                     mask = res.dm==False
-                    res.loc[mask,Vj] = timeseries.loc[(slice(None),compartment),'V'].reindex(res.index,method = 'bfill')
+                    res.loc[mask,Vj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'V']),
+                                 index=res.index.levels[0]).reindex(res.index,level=0)[0]
                     res.loc[mask,Vjind] = res.loc[mask,Vj] #Needed for FugModel ABC
-                    res.loc[mask,Aj] = timeseries.loc[(slice(None),compartment),'Area'].reindex(res.index,method = 'bfill')
-                res.loc[mask,focj] = timeseries.loc[(slice(None),compartment),'FrnOC'].reindex(res.index,method = 'bfill') #Fraction organic matter
-                res.loc[mask,Ij] = timeseries.loc[(slice(None),compartment),'cond'].reindex(res.index,method = 'bfill')*1.6E-5 #Ionic strength from conductivity #Plants from Trapp (2000) = 0.5
-                res.loc[mask,fwatj] = timeseries.loc[(slice(None),compartment),'FrnWat'].reindex(res.index,method = 'bfill') #Fraction water
-                res.loc[mask,fairj] = timeseries.loc[(slice(None),compartment),'Frnair'].reindex(res.index,method = 'bfill') #Fraction air
-                res.loc[mask,fpartj] = timeseries.loc[(slice(None),compartment),'FrnPart'].reindex(res.index,method = 'bfill') #Fraction particles
-                res.loc[mask,tempj] = timeseries.loc[(slice(None),compartment),'Temp'].reindex(res.index,method = 'bfill') + 273.15 #Temperature [K]
-                res.loc[mask,pHj] = timeseries.loc[(slice(None),compartment),'pH'].reindex(res.index,method = 'bfill') #pH
-                res.loc[mask,rhopartj] = timeseries.loc[(slice(None),compartment),'PartDensity'].reindex(res.index,method = 'bfill') #Particle density
-                res.loc[mask,rhoj] = timeseries.loc[(slice(None),compartment),'Density'].reindex(res.index,method = 'bfill') #density for every x [M/L³]
-                res.loc[mask,advj] = timeseries.loc[(slice(None),compartment),'Q_out'].reindex(res.index,method = 'bfill')
+                    res.loc[mask,Aj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'Area']),
+                                 index=res.index.levels[0]).reindex(res.index,level=0)[0]
+                res.loc[mask,focj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'FrnOC']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #Fraction organic matter
+                res.loc[mask,Ij] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'cond']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0]*1.6E-5 #Ionic strength from conductivity #Plants from Trapp (2000) = 0.5
+                res.loc[mask,fwatj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'FrnWat']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #Fraction water
+                res.loc[mask,fairj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'Frnair']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #Fraction air
+                res.loc[mask,fpartj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'FrnPart']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #Fraction particles
+                res.loc[mask,tempj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'Temp']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] + 273.15 #Temperature [K]
+                res.loc[mask,pHj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'pH']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #pH
+                res.loc[mask,rhopartj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'PartDensity']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #Particle density
+                res.loc[mask,rhoj] = pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'Density']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0] #density for every x [M/L³]
+                res.loc[mask,advj] =pd.DataFrame(np.array(timeseries.loc[(slice(None),compartment),'Q_out']),
+                             index=res.index.levels[0]).reindex(res.index,level=0)[0]
                 if compartment == 'air': #Set air density based on temperature
                     res.loc[mask,rhoj] = 0.029 * 101325 / (params.val.R * res.loc[:,tempj])
                     #res.loc[mask,advj] = np.sqrt(locsumm.loc['air','Area'])*locsumm.loc['air','Depth']     
         res.loc[res.dm,'Arootsubsoil'] = res.Aroot #Area of roots in direct contact with subsoil
         #Vertical facing soil area
-        res.loc[res.dm,'AsoilV'] = timeseries.loc[(slice(None),'subsoil'),'Area']\
-        .reindex(res.index,method = 'bfill')
+        res.loc[res.dm,'AsoilV'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #For bioretention, we want this interface in the top of the soil and in the non-discretized compartment (if present)
         #pdb.set_trace()
         mask = (res.x == min(res.x)) | (res.x == 999.)
-        res.loc[mask,'Asoilair'] = timeseries.loc[(slice(None),'topsoil'),'Area']\
-        .reindex(res.index,method = 'bfill') #Only the "topsoil" portion of the soil interacts with the air
+        res.loc[mask,'Asoilair'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'topsoil'),'Area']),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0] #Only the "topsoil" portion of the soil interacts with the air
         #Shoot area based off of leaf area index (LAI) 
-        if any(res.dm==False): #skip if no undiscretized compartments
-            res.loc[res.dm==False,'A_shootair'] = params.val.LAI*timeseries.loc[(slice(None),'topsoil'),'Area']\
-            .reindex(res.index,method = 'bfill') #Total root volume per m² ground area
+        if 'shoots' in numc: #skip if no shoots aren't included
+            res.loc[res.dm==False,'A_shootair'] = params.val.LAI*res.Asoilair #Total root volume per m² ground area
 
         #Longitudinal Dispersivity. Calculate using relationship from Schulze-Makuch (2005) 
         #for unconsolidated sediment unless a value of alpha [L] is given
