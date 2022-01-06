@@ -249,18 +249,16 @@ class BCBlues(SubsurfaceSinks):
         #Velocity
         res.loc[:,'v1'] = res.Qwater/res.Awater #velocity [L/T] at every x
         #Root volumes & area based off of soil volume fraction.
-        
-        res.loc[res.dm,'Vroot'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
-                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/res.loc[(slice(10),slice(None)),'dm'].sum()  #Total root volume per m² ground area
-        res.loc[res.dm,'Aroot'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'subsoil'),'Area']),
-                     index=res.index.levels[0]).reindex(res.index,level=0)[0]/len(res.index.levels[0]) #Total root area per m² ground area
+        pdb.set_trace()
+        res.loc[res.dm,'Vroot'] = res.Vsubsoil*params.val.VFroot #Total root volume per m³ ground volume
+        res.loc[res.dm,'Aroot'] = res.Asubsoil*params.val.Aroot #Total root area per m² ground area
         #Don't forget your drainage area - assume roots do not go in the drainage zone
         res.loc[(slice(None),numx[-1]+1),'Vroot'] = 0 #Total root volume per m² ground area
         res.loc[(slice(None),numx[-1]+1),'Aroot'] = 0 #Total root area per m² ground area        
         #Now we loop through the compartments to set everything else.
         #Change the drainage zone to part of the dm 
         res.loc[(slice(None),numx[-1]+1),'dm'] = True
-        #pdb.set_trace()
+        
         for jind, j in enumerate(numc):
             #Area (A), Volume (V), Density (rho), organic fraction (foc), ionic strength (Ij)
             #water fraction (fwat), air fraction (fair), temperature (tempj), pH (phj)

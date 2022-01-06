@@ -873,6 +873,8 @@ class SubsurfaceSinks(FugModel):
                     a_val, a_valt1 = 'a'+str(j+1) + '_t', 'a'+str(j+1) + '_t1'
                     M_val, V_val, Z_val = 'M'+str(j+1) + '_t1', 'V' + str(j+1), 'Z' + str(j+1)
                     #Define a_t so as to be mass conservative - since system is explicit for volumes etc. this can cause mass loss
+                    #pdb.set_trace()
+                    print(t)
                     res.loc[(slice(None),t,slice(None)),a_val] = np.array(res.loc[(slice(None),(t-1),slice(None)),M_val])\
                     /np.array(res.loc[(slice(None),(t),slice(None)),V_val])/np.array(res.loc[(slice(None),(t),slice(None)),Z_val])
                     #For the pond compartment, need to add Qin - advective step at the beginning. Otherwsie when pond dries up mass disappears.
@@ -886,10 +888,10 @@ class SubsurfaceSinks(FugModel):
             #Now - run it forwards a time step!
             #Feed the time to params
             res_t = res.loc[(slice(None),t,slice(None)),:]
-            #For error checking, stop at specific input
-            if t == 216:#260: #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
-                #pdb.set_trace()
-                pass
+            #For error checking, stop at specific time
+            if t == 260:#260: #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
+                pdb.set_trace()
+                dangit = 'cute_cat'
             #Call the ADRE code in the FugModel module
             res_t = self.ADRE_1DUSS(res_t,params,numc,dt)
             for j in range(0,len(numc)): #Put sthe results - a value at the next time step and input mass - in the dataframe
