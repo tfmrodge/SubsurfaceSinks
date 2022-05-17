@@ -249,7 +249,7 @@ class BCBlues(SubsurfaceSinks):
         #Velocity
         res.loc[:,'v1'] = res.Qwater/res.Awater #velocity [L/T] at every x
         #Root volumes & area based off of soil volume fraction.
-        pdb.set_trace()
+        #pdb.set_trace()
         res.loc[res.dm,'Vroot'] = res.Vsubsoil*params.val.VFroot #Total root volume per m³ ground volume
         res.loc[res.dm,'Aroot'] = res.Asubsoil*params.val.Aroot #Total root area per m² ground area
         #Don't forget your drainage area - assume roots do not go in the drainage zone
@@ -278,7 +278,7 @@ class BCBlues(SubsurfaceSinks):
                         res.loc[mask,Vj] = params.loc[VFrj,'val']*res.Vroot
                         #Area of roots - this is calculating the surface area of the roots as a fraction of the overall root area.
                         #We can derive this using the lateral surface area of the roots (neglect tips) and the area & volume fractions
-                        # We know that V2/V1 = VF12, and we have V1/A1 = X from the params file. So, A2 = VF12^(-1/3)*A1/V1*V2
+                        #We know that V2/V1 = VF12, and we have V1/A1 = X from the params file. So, A2 = VF12^(-1/3)*A1/V1*V2
                         if compartment in ['rootxylem']: #xylem surrounds the central cylinder so need to add the fractions and the volumes
                             res.loc[mask,Aj] = (params.val.VFrootxylem+params.val.VFrootcyl)**(-1/3)*res.Aroot/res.Vroot\
                             *(params.val.VFrootxylem+params.val.VFrootcyl)*res.Vroot
