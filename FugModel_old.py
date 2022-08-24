@@ -275,9 +275,9 @@ class FugModel(metaclass=ABCMeta):
             res.loc[(slice(None),slice(None),slice(numx-1,numx-1)),'dmd'] = True #Drainage cell
         else:
             res.loc[(slice(None),slice(None),slice(numx-1,numx-1)),'dmn'] = True #Last discretized cell 
-        res.loc[:,'ndm'] = (res.dm==False) #Non-discretized cell
+        res.loc[:,'ndm'] = (res.dm==False) #Drainage cell
         #We are going to declare the drainage cell non-discretized for the purposes of the ADRE - advection only into it        
-        #res.loc[res.dmd==True,'dm'] = False
+        res.loc[res.dmd==True,'dm'] = False
         if 'dx' not in res.columns: #
             res.loc[:,'dx'] = res.groupby(level = 0)['x'].diff()
             res.loc[(slice(None),0),'dx'] = res.x[0]
@@ -366,20 +366,17 @@ class FugModel(metaclass=ABCMeta):
         xf_test1[res.del_0>=dt] = res.v1*dt
         #Bring what we need to res. The above could be made a function to clean things up too.
         #Distance from the forward and back faces
-        #res.loc[:,'xb'] = (res.x+res.x.shift(1))/2 - xb_test1
-        #res.loc[:,'xf'] = (res.x+res.x.shift(-1))/2 - xf_test1
-        #res.loc[(slice(None),slice(None),res.dmn),'xf'] = res.x + res.dx/2 - xf_test1
-        res.loc[:,'xf'] = res.x + res.dx/2 - xf_test1
-        
+        res.loc[:,'xb'] = (res.x+res.x.shift(1))/2 - xb_test1
+        res.loc[:,'xf'] = (res.x+res.x.shift(-1))/2 - xf_test1
+        res.loc[(slice(None),slice(None),res.dmn),'xf'] = params.val.L - xf_test1
         #For continuity, xb is the xf of the previous step
-        #mask = res.xb != res.groupby(level = 0)['xf'].shift(1)
-        res.loc[:,'xb'] = res.groupby(level = 0)['xf'].shift(1)
+        mask = res.xb != res.groupby(level = 0)['xf'].shift(1)
+        res.loc[mask,'xb'] = res.groupby(level = 0)['xf'].shift(1)
         #Clean up the US boundary, anything NAN or < 0 comes from before the origin
         maskb = (np.isnan(res.xb) | (res.xb < 0))
         maskf = (np.isnan(res.xf)) | (res.xf < 0)
         res.loc[maskb,'xb'] = 0
         res.loc[maskf,'xf'] = 0
-
         #Downstream boundary, xb ends up zero so set equal to corresponding xf
         #res.loc[(slice(None),numx-1),'xb'] = np.array(res.loc[(slice(None),numx-2),'xf'])
         #Define the cumulative mass along the entire length of the system as M(x) = sum (Mi)
@@ -396,22 +393,22 @@ class FugModel(metaclass=ABCMeta):
             
             xx = np.append(0,res.loc[(ii,slice(None),res.dm),'dx'].cumsum())#forward edge of each cell
             yy = np.append(0,res.loc[(ii,slice(None),res.dm),'M_n']) #Cumulative mass in the system
-            #f = interp1d(xx,yy,kind='cubic',fill_value='extrapolate')
+            f = interp1d(xx,yy,kind='cubic',fill_value='extrapolate')
             f1 = interp1d(xx,yy,kind='linear',fill_value='extrapolate')#Linear interpolation where cubic fails
             #Determine mass at xf and xb
-            res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf']) 
+            res.loc[(ii,slice(None),res.dm),'M_xf'] = f(res.loc[(ii,slice(None),res.dm),'xf']) 
             #Check if the mass at the RHS of the cell is more than the mass in the cell, correct.
             res.loc[res.M_xf>res.M_n,'M_xf'] = res.loc[res.M_xf>res.M_n,'M_n']
             res.loc[(ii,slice(None),res.dm),'M_xb'] = res.loc[(ii,slice(None),res.dm),'M_xf'].shift(1)
-            #res.loc[(ii,slice(None),res.dmd),'M_xb'] = np.nan
+            res.loc[(ii,slice(None),res.dmd),'M_xb'] = np.nan
             res.loc[(ii,slice(None),res.dm0),'M_xb'] = 0.
-            res.loc[(ii,slice(None),res.dm),'M_star'] = res.loc[(ii,slice(None),res.dm),'M_xf']\
-            - res.loc[(ii,slice(None),res.dm),'M_xb']
+            res.loc[(ii,slice(None),res.dm),'M_star'] = f(res.loc[(ii,slice(None),res.dm),'xf'])\
+            - f(res.loc[(ii,slice(None),res.dm),'xb'])
             
             #check if the cubic interpolation failed (<0), use linear in those places.
             mask = res.loc[(ii,slice(None),res.dm),'M_star'] < 0
             if sum(mask) == 0: #Override with linear to see if this is causing instability
-                YOMAMA = 'AWESOME'
+                #YOMAMA = 'FAT'
                 pass 
             if sum(mask) != 0:
                 #pdb.set_trace()
@@ -422,7 +419,6 @@ class FugModel(metaclass=ABCMeta):
                 res.loc[(ii,slice(None),res.dm),'M_star'] = f1(res.loc[(ii,slice(None),res.dm),'xf'])\
                 - f1(res.loc[(ii,slice(None),res.dm),'xb'])
                 res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf']) #Mass at xf, used to determine advection out of the system
-                res.loc[(ii,slice(None),res.dm),'M_xb'] = res.loc[(ii,slice(None),res.dm),'M_xf'].shift(1)
         
         #US boundary conditions
         #For non-pulse systems, define mass flowing in. Some will be lost at the US BC to diffusion.
@@ -520,40 +516,22 @@ class FugModel(metaclass=ABCMeta):
             res.loc[mask,'M_star'] = slope.reindex(res.loc[mask,'M_star'].index,method = 'ffill') * (res.xf[mask] - res.xb[mask])
         #Define advective flow for the drainage cell
         #pdb.set_trace()
-        
-        #Now we declare the drainage cell non-discretized for the purposes of the ADRE - advection only into it        
-        res.loc[res.dmd==True,'dm'] = False
         if params.val.vert_flow == 1:
-            #Mass in the drainage cell = mass at time t + effluent from penultimate cell-drain effluent
-            #res.loc[res.dmd,'M_star']  = res.loc[res.dmd,'M_i'] \
-            #+np.array(res.loc[res.dmn,'M_n'] - res.loc[res.dmn,'M_xf'])
-            #20220819 - made this implicit by adding D_drain to input_calcs. So now, explicit advective flow in, implicit 
-            #flow out
             res.loc[res.dmd,'M_star']  = res.loc[res.dmd,'M_i'] \
-            +np.array(res.loc[res.dmn,'M_n'] - res.loc[res.dmn,'M_xf'])
-            #- np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))#This line is advective mass out. -explicit.
-        #    - np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*(res.loc[res.dmd,'Qwaterexf']+res.loc[res.dmd,'Qout'])))
+            +np.array(res.loc[res.dmn,'M_n'] - res.loc[res.dmn,'M_xf'])\
+            - np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))#This line is advective mass out. -explicit.
         #res.loc[:,'M_star'].sum()/(res.loc[:,'M_i'].sum()-np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))) #Code to check if the mass from the advection step balances
         #- np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'D_waterexf']))
         #Divide out to get back to activity/fugacity from advection
         res.loc[:,'a_star'] = res.M_star / res.Z1 / res.V1
         #checkmass =  res.loc[:,'M_i'].sum() - res.loc[:,'M_star'].sum() - np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))
         #Error checking, does the advection part work? Advection only. ALSO CHANGE M_star to include exfiltration from final cell.
-        #'''
+        '''
         res.loc[:,'a1_t1'] = res.a_star 
         res.loc[:,'a2_t1'] = 0
         res.loc[:,'M1_t1'] = res.M_star 
-        try:
-            res.loc[:,'M2_t1'] += res.Mqin
-        except KeyError:
-            res.loc[:,'M2_t1'] = 0.
-        #Set all others to 0
-        for j in range(len(numc[2:])):
-            a_val, M_val = 'a'+str(j+3) + '_t1','M'+str(j+3) + '_t1'
-            res.loc[:,a_val] = 0
-            res.loc[:,M_val] = 0
-        
-        #'''
+        res.loc[:,'M2_t1'] = 0
+        '''
         #Finally, we can set up & solve our implicit portion!
         #This is based on the methods of Manson and Wallis (2000) and Kilic & Aral (2009)
         #Define the spatial weighting term (P) 
@@ -725,13 +703,12 @@ class FugModel(metaclass=ABCMeta):
                 #pdb.set_trace
                 res.loc[(slice(None),slice(None),slice(None)),inp_mass] = dt*res.loc[:,inp_val]
             if sum(res.loc[:,a_val]<0) >0: #If solution gives negative values flag it
-                pdb.set_trace()
+                #pdb.set_trace()
                 #xxx = 'poop'
                 #On error, set all a values to zero.
-                sys.exit('Negative activity error at '+str(res.time[0]))
+                sys.exit('Negative activity error')
         #xxx = 1
         #'''
-        
         return res
 
 
