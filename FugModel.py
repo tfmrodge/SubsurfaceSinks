@@ -440,7 +440,7 @@ class FugModel(metaclass=ABCMeta):
         #pdb.set_trace()
         if 'pond' in numc: 
             ponda_t, inp_val = 'a' + str(numc.index('pond')+1) +"_t", 'inp_' +str(numc.index('pond')+1)
-            #The ponding zone is a single compartment, so gets the entire Min sin one go.
+            #The ponding zone is a single compartment, so gets the entire Min in one go.
             #So we add apond_t and the incoming mass
             pondastar = np.array(np.array(res.loc[res.ndm,ponda_t]*res.loc[res.ndm,'Zpond']*(res.Vpond[-1] + res.Qin[-1]*dt)\
                                  +np.array(res.loc[(slice(None),slice(None),0),'Min']))\

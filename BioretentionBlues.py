@@ -18,6 +18,7 @@ from warnings import simplefilter
 from hydroeval import kge #Kling-Gupta efficiency (Kling-Gupta et al., 2009)
 import hydroeval
 from scipy.optimize import minimize
+import psutil
 #simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 #simplefilter(action="ignore", category= RuntimeWarning)
 
@@ -238,42 +239,72 @@ class BCBlues(SubsurfaceSinks):
         #Then water volume and velocity
         dt = timeseries.loc[(slice(None),numc[0]),'time'] - timeseries.loc[(slice(None),numc[0]),'time'].shift(1)
         dt[np.isnan(dt)] = dt.iloc[1]
+        #2022-10-11 since all flows are spread among all cells, this is true
+        res.loc[(slice(None),slice(numx-1)),'V1'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'V']/numx),
+                     index=res.index.levels[0]).reindex(res.index,level=0)[0]
         
+        '''2022-10-11 Removed as it was equivalent to above expression for current set-up
         #Matrix solution to volumes. Changed from running through each t to running through each x, hopefully faster.
         #dV = V(t) - V(t-1); dV = sumQ*dt
-        #NOTE THAT THIS USES LOTS OF RAM!! - basically uses another couple of GB.
+        #NOTE THAT THIS USES LOTS OF RAM!! - uses up to 100s of GB (scales as numt**2)
         #A slower solution would do better RAM-wise
-        numt = len(res.index.levels[0])
-        mat = np.zeros([numx,numt,numt],dtype=np.int8)
-        inp = np.zeros([numx,numt])
-        m_vals = np.arange(0,numt,1)
-        b_vals = np.arange(1,numt,1)
-        mat[:,m_vals,m_vals] = 1       
-        mat[:,b_vals,m_vals[0:numt-1]] = -1
-        #Set last one manually
-        #mat[:,numt-1,numt-2] = -1
-        #20220111 Fixed bug where all Xs were being set by x = 0. 
-        for x in range(numx):
-            #RHS of the equation are the net ins and outs from the cell.
-            #inp[x,:] = np.array((res.loc[(slice(None),0),'Qin']+res.loc[(slice(None),0),'Qcap']-res.loc[(slice(None),0),'Qet']\
-            #           -res.loc[(slice(None),0),'Qwaterexf']-res.loc[(slice(None),0),'Qout']))*np.array(dt)
-            inp[x,:] = np.array((res.loc[(slice(None),x),'Qin']+res.loc[(slice(None),x),'Qcap']-res.loc[(slice(None),x),'Qet']\
-                       -res.loc[(slice(None),x),'Qwaterexf']-res.loc[(slice(None),x),'Qout']))*np.array(dt)  
-        #Since flow calculations are explicit, V(t) = V(t-1) + sum(Q(t-1))*dt, need to shift down one
-        inp = np.roll(inp,1,axis=1)#Note that this will put the final column in zero, we fix below
-        #Then for initial conditions at t = 0 assume uniform saturation.
-        inp[:,0] =  timeseries.loc[(min(res.index.levels[0]),'water'),'V']/(numx)
-        #And, we need to set the first timestep matrix values to zero
-        #mat[:,0,1] = 0
-        #for x in range(numx):
-        matsol = np.linalg.solve(mat,inp)
-        newrow = [matsol[0,:]*np.nan]
-        matsol = np.r_[matsol,newrow]
-        matsol = np.r_[matsol,newrow]
-        matsol = matsol.reshape(matsol.shape[0]*matsol.shape[1],order = 'f')
-        res.loc[(slice(None),slice(None)),'V1'] = matsol
+        #2022-10-11 edited to account for amount of RAM available. This will now take 
+        #almost all the RAM you have available rather than blowing past it! 
+        memavail = psutil.virtual_memory()[1] #In bytes (memavail-psutil.virtual_memory()[1])/1e9
+        numloops = int(np.ceil(np.sqrt((len(res.index.levels[0])**2*numx*8)/memavail)))
+        tmax = min(res.index.levels[0])#Starting step
+        laststep = timeseries.loc[(min(res.index.levels[0]),'water'),'V']/(numx)
+        for ind in range(numloops): #Define number of timesteps per loop 
+            if ind != (numloops-1):
+                numt = int(np.floor(len(res.index.levels[0])/numloops))
+                #tmax += numt
+            else:
+                numt = max(res.index.levels[0]) - tmax +1#len(res.index.levels[0]) - tmax
+                #tmax = max(res.index.levels[0])
+            tmax += numt
+            #We are going to repeat the calculation for the "last-step" cell each time - expanded to "numt+1"
+            #for ind>0
+            if ind > 0:
+                addcell = 1
+            else:
+                addcell = 0
+            mat = np.zeros([numx,numt,numt],dtype=np.int8)#1 byte per value
+            matsol = np.zeros([numx,numt+addcell,numt+addcell],dtype=np.float32)
+            inp = np.zeros([numx,numt+addcell])
+            m_vals = np.arange(0,numt+addcell,1)
+            b_vals = np.arange(1,numt+addcell,1)
+            mat[:,m_vals,m_vals] = 1       
+            mat[:,b_vals,m_vals[0:numt-1+addcell]] = -1
+            #Set last one manually
+            #mat[:,numt-1,numt-2] = -1
+            #20220111 Fixed bug where all Xs were being set by x = 0. 
+            startt = tmax-numt-addcell
+            for x in range(numx):
+                #RHS of the equation are the net ins and outs from the cell.
+                #inp[x,:] = np.array((res.loc[(slice(None),0),'Qin']+res.loc[(slice(None),0),'Qcap']-res.loc[(slice(None),0),'Qet']\
+                #           -res.loc[(slice(None),0),'Qwaterexf']-res.loc[(slice(None),0),'Qout']))*np.array(dt)
+                inp[x,:] = np.array((res.loc[(slice(startt,tmax-1),x),'Qin']+res.loc[(slice(startt,tmax-1),x),'Qcap']-res.loc[(slice(startt,tmax-1),x),'Qet']\
+                           -res.loc[(slice(startt,tmax-1),x),'Qwaterexf']-res.loc[(slice(startt,tmax-1),x),'Qout']))*np.array([dt[:numt+addcell]])  
+            #Since flow calculations are explicit, V(t) = V(t-1) + sum(Q(t-1))*dt, need to shift down one
+            inp = np.roll(inp,1,axis=1)#Note that this will put the final column in zero, we fix below
+            #Specify initial conditions for each loop
+            #if ind == 0:
+                #For initial conditions at t = 0 use last time step
+            #    inp[:,0] = timeseries.loc[(min(res.index.levels[0]),'water'),'V']/(numx)
+            #else:#Otherwise, use the stored results from the last step to start off. 
+            inp[:,0] = laststep     
+            matsol = np.linalg.solve(mat,inp)
+            #Add the drain zone cell and the non-discretized cell
+            newrow = [matsol[0,:]*np.nan]
+            matsol = np.r_[matsol,newrow]
+            matsol = np.r_[matsol,newrow]
+            matsol = matsol.reshape(matsol.shape[0]*matsol.shape[1],order = 'f')
+            res.loc[(slice(startt,tmax-1),slice(None)),'V1'] = matsol
+            #set the last step
+            laststep = np.array(res.loc[(slice(tmax-1,tmax-1),slice(numx-1)),'V1'])
         '''
-        #OLD CODE - run through each t rather than each x. Significantly slower, but less RAM
+        '''
+        #Very Old CODE - run through each t rather than each x. Significantly slower, but less RAM
         #Left in in case someone has RAM limitations
         for t in timeseries.index.levels[0]: #This step is slow, as it needs to loop through the entire timeseries.
             if t == timeseries.index.levels[0][0]:
@@ -526,6 +557,7 @@ class BCBlues(SubsurfaceSinks):
                 #Correct, this will only ever be a very small error.
                 dVp = -res.loc[compartments[0],'V']
             res.loc[compartments[0],'V'] += dVp
+            #pdb.set_trace()
             res.loc[compartments[0],'Depth'] = np.interp(res.V.pond,pondV,pondH, left = 0, right = pondH[-1])  
             #Area of pond/soil surface m² at t+1
             res.loc[compartments[0],'Area'] = np.interp(res.V.pond,pondV,pondA, left = 0, right = pondA[-1])  
@@ -815,19 +847,24 @@ class BCBlues(SubsurfaceSinks):
             params.loc['fvalveopen','val'] = timeseries.fvalveopen[t]
             
             #pdb.set_trace()
-            #Hardcoding switch in Kf after tracer event. If Kn2 is in the params it will switch
+            #Hardcoding switch in Kn after tracer event. If Kn2 is in the params it will switch
             if timeseries.time[t] > 7.:
                 try:
                     params.loc['Kn','val'] = params.val.Kn2
                 except AttributeError:
                     pass
+            #Update some parameters based on timeseries
+            try:
+                params.loc['Emax','val'] = timeseries.loc[t,'Max_ET']
+            except KeyError:
+                pass
             #if t == 241:#216:#Break at specific timing 216 = first inflow
             if timeseries.time[t] == 0.0:
                 #pdb.set_trace()
                 yomama = 'great'
             res = self.bc_dims(res,inflow,rainrate,dt,params)
             res_t[t] = res.copy(deep=True)
-            #Add the 'time' to the resulting dataframe
+            #Add the 'time' to the resulting dataframe, update some parameters
             res_t[t].loc[:,'time'] = timeseries.loc[t,'time']
             res_t[t].loc[:,'RH'] = timeseries.loc[t,'RH']
             res_t[t].loc[:,'RainRate'] = timeseries.loc[t,'RainRate']
