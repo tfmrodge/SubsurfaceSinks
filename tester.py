@@ -7,6 +7,85 @@ Created on Fri Oct  7 11:53:19 2022
 import pandas as pd
 import numpy as np
 import pdb
+import matplotlib.pyplot as plt
+import seaborn as sns
+from BioretentionBlues import BCBlues
+#Inputs
+#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_defaults.pkl'
+outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_results.pkl'
+#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_nodrain.pkl'
+#pltvar = 'pct_stormsewer'
+numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
+locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx')
+pltdata = pd.read_pickle(outpath)
+
+xticks = [0.25,0.5,1,3, 6,12,24]
+xticks = [np.log10(xticks),xticks]
+
+yticks = [5,10,25,50,100]
+yticks = [np.log10(yticks),yticks]
+#pltvars=['RQ_av','LogD','LogI']
+pltvars=['pct_stormsewer','LogD','LogI']
+interplims = [0.,1]
+vlims=[0.15,0.85]
+#pdb.set_trace()
+cmap = None#sns.cubehelix_palette(start=.75, rot=-.5,light=0.85, as_cmap=True)
+#cmap = sns.cubehelix_palette(n_colors = 7,start=1.40, rot=-0.9,gamma = 0.3, hue = 0.9, dark=0.1, light=.95,as_cmap=True,reverse=True)
+bc = BCBlues(locsumm,chemsumm,params,timeseries,numc) 
+fig,ax = bc.plot_idfs(pltdata,xticks=xticks,yticks=yticks,pltvals=True,pltvars=pltvars,cmap=cmap,vlims=vlims,interplims=interplims)
+#for i, txt in enumerate(pltdata.index):
+#    ax.annotate(str(pltdata.iloc[i,0]),xy= (pltdata.iloc[i,1],pltdata.iloc[i,2]))
+#ax.set_xlabel('Event Duration (hrs)')
+#ax.set_ylabel('Intensity (mm/hr)')
+#ax.set_xticks(xticks[0])
+#ax.setxticklabels(xticks[1])
+#ax.set_yticks(yticks[0],labels=yticks[1])
+
+'''
+#cmap = sns.cubehelix_palette(n_colors = 7,start=1.40, rot=-0.9,gamma = 0.3, hue = 0.9, dark=0.1, light=.95,as_cmap=True,reverse=True)
+#For mass removal (soil vs water)
+cmap = sns.diverging_palette(30, 250, l=40,s=80,center="light", as_cmap=True)#sep=1,
+#Actual code
+outs = pd.read_pickle(outpath)
+pltdata = outs.loc[:,[pltvar,'LogD','LogI']]
+#pltdata = pltdata.loc[:,[pltvar,'LogD','Intensity']]
+fig, ax = plt.subplots(1,1,figsize = (15,10),dpi=300)
+
+pltvars = ['LogD','LogI']
+#pltvars = ["LogD",'Intensity']
+df = pltdata.pivot(index=pltvars[1],columns=pltvars[0])[pltvar]
+df = df.interpolate(axis=0,method='spline',order=2)
+#df = df.interpolate(axis=0,method='nearest')
+
+#df = df.interpolate(axis=0,method='quadratic')
+df[np.isnan(df)] = 0
+df[df>1.] = 1.
+df[df<0.] = 0.
+
+#Soil-water differences
+pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,sep=1, vmin=0.15,vmax=0.85,levels=15)
+#Other stuff
+#pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,sep=1)
+sns.lineplot(x='LogD',y='LogI',data=outs.reset_index(),hue='Frequency',ax=ax,palette=sns.color_palette('Greys')[:len(outs.Frequency.unique())])
+ax.set_xlim([-0.75,1.380211])
+
+if pltvals == True:
+    for i, txt in enumerate(pltdata.index):
+        #xycoords = str([pltdata.iloc[i,1],pltdata.iloc[i,2]])
+        #txt = str(pltdata.iloc[i,0])
+        ax.annotate(str(pltdata.iloc[i,0]),xy= (pltdata.iloc[i,1],pltdata.iloc[i,2]))
+else:
+    pass
+
+fig.colorbar(pc)
+figpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Manuscript/Figs/Pythonfigs/'
+figname = 'IDF_Default'
+#fig.savefig(figpath+figname+'.pdf',format='pdf')
+'''
+'''
 #full_series = pd.read_excel('inputfiles/2014_timeseries.xlsx')
 #SWMMseries.head()
 timeseries = pd.DataFrame(columns = ['dt','elapsedtime','precip','runoff'])
@@ -64,4 +143,4 @@ while t < len(SWMMseries.index):
 timeseries = timeseries.drop(index=max(timeseries.index))
 #timeseries.to_excel('inputfiles/swmmouts_2014.xlsx')
 
-    
+    '''

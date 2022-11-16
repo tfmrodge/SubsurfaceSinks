@@ -28,21 +28,34 @@ numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','p
 locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
 chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+#chemsumm.loc['Rhodamine','pKa'] = 999
+#chemsumm.loc['Rhodamine','chemcharge'] = 0
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
-#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
-#timeseries = timeseries[timeseries.time<=6]
+timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
+timeseries = timeseries[timeseries.time<=6]
+timeseries.loc[:,['pHwater']] = timeseries.pHwater + 4
+timeseries.loc[:,['pHsubsoil']] = timeseries.pHwater
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
-timeseries = pd.read_excel('inputfiles/timeseries_2014.xlsx')
+#Check KGE
+#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_3hr.xlsx')
+#Changing parameters for testing
+'''
+paramnames = ['alpha','thetam']
+paramvals = [0.55519243, 0.34502549]
+for ind, paramname in enumerate(paramnames):
+    params.loc[paramname,'val'] = paramvals[ind]
+'''
+#timeseries = pd.read_excel('inputfiles/timeseries_2014.xlsx')
 #Instantiate the model. In this case we will ball the model object "bioretention_cell"
 bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
 #pdb.set_trace()
 calcflow = True#True#False# True# True#
 #flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
 flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_flows.pkl'
-if calcflow is None:
+if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     mask = timeseries.time>=0
     minslice = np.min(np.where(mask))
@@ -53,8 +66,8 @@ if calcflow is None:
     #Plot whole event
     bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
     #Plot spike event
-    #bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
-    #              compartments=['drain','water'],yvar='Q_todrain')
+    bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
+                  compartments=['drain','water'],yvar='Q_todrain')
     #Plot latter event
     #bc.plot_flows(flow_time.loc[flow_time.time>140],Qmeas = timeseries.loc[timeseries.time>140,'Qout_meas'],
     #              compartments=['drain','water'],yvar='Q_todrain')
@@ -64,7 +77,7 @@ if calcflow is None:
     KGE = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
                           np.array(timeseries.loc[timeseries.time>=0,'Qout_meas']))
     #flow_time.to_pickle(flowpath)
-elif calcflow == None:
+elif calcflow is None:
     pass
 else:
     flow_time = pd.read_pickle(flowpath)
@@ -75,7 +88,7 @@ codetime = time.time() - codetime
 #Input calculations
 #inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/inputtest.pkl'   
 inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_inputs.pkl'   
-calcinp = False#False#
+calcinp = True#False#
 if calcinp is True:
     input_calcs = bc.input_calc(locsumm,chemsumm,params,pp,numc,timeseries,flow_time=flow_time)
     input_calcs.to_pickle(inpath)
@@ -83,6 +96,7 @@ else:
     input_calcs = pd.read_pickle(inpath)
 #
 #input_calcs = pd.read_pickle(inpath)
+#'''
 runall = False#None#None#'Load'#'Load'#
 if runall is True:
     res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
@@ -118,8 +132,8 @@ if plotfig == True:
     time = 8760#1000#6#1000#6#1000
     fig,ax = bc.BC_fig(numc,mass_balance=mbal_cum,time = time,compound=compound,figheight=6,fontsize=7,dpi=300)
 #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_results.pkl'
+#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_results.pkl'
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_simstorm.pkl'
-#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_spiketest.pkl'
-res.to_pickle(outpath)
+outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_spiketest.pkl'
+#res.to_pickle(outpath)
 #'''

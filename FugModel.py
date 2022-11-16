@@ -335,7 +335,10 @@ class FugModel(metaclass=ABCMeta):
         dels = 0
         #for dels in range(int(max(1,max(np.floor(res.c))))): #Max cells any go through (could be wrong if q increases)
         #pdb.set_trace()
-        numcells = int(max(np.floor(res.c)))#max(int(max(np.floor(res.c))),1)
+        try: 
+            numcells = int(max(np.floor(res.c)))#max(int(max(np.floor(res.c))),1)
+        except OverflowError:
+            numcells = 1
         for dels in range(numcells):
             #Time to traverse a full cell
             delb_test += res.groupby(level = 0)['del_0'].shift(dels+1)
