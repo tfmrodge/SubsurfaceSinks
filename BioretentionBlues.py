@@ -1089,7 +1089,7 @@ class BCBlues(SubsurfaceSinks):
         fig.savefig(fpath + 'simstorm1.pdf',format = 'pdf')
         return fig
         
-    def calibrate_flows(self,timeseries,paramnames,param0s):
+    def calibrate_flows(self,timeseries,paramnames,param0s,bounds=((0.0,1.0),(0.0,1.0),(0.0,1.0))):
         '''
         Calibrate flows based on measured effluent in the "timeseries"
         file and a test parameter name (string) and initial value (param0)
@@ -1121,10 +1121,10 @@ class BCBlues(SubsurfaceSinks):
         
         
         #ins = [param0]
-        bnds = ((0.0,1.0),(0.0,1.0),(0.0,1.0))
+        #bnds = ((0.0,1.0),(0.0,1.0),(0.0,1.0))
         #bnds = ((0.0,1.0),(0.0,1.0))#,(0.0,1.0))
-        #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='L-BFGS-B',options={'disp': True})
-        res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='SLSQP',options={'disp': True})
+        res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bounds,method='L-BFGS-B',options={'disp': True})
+        #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='SLSQP',options={'disp': True})
         #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
         return res
         
@@ -1174,16 +1174,70 @@ class BCBlues(SubsurfaceSinks):
                 eff = np.mean(KGE)
                 #An efficiency of 1 is ideal, therefore we want to see how far it is from 1
                 obj = (1-eff)
+                print(obj,param)
             return obj
         
         
         #ins = [param0]
         #bnds = ((0.0,1.0),(0.0,1.0),(0.0,10000))
         #bnds = ((0.0,1.0),(0.0,1.0))#,(0.0,1.0))
-        #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',options={'disp': True})
-        res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='SLSQP',options={'disp': True})
+        res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',tol=1e-3,options={'disp': True,'maxfun':100})
+        #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='SLSQP',options={'disp': True})
         #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
-        return res       
+        return res 
+
+    def plot_idfs(self,pltdata,pltvars=['pct_stormsewer','LogD','LogI'],cmap=None,
+                  pltvals=False,savefig=False,figpath=None,interplims = [0.,1.],figsize=(10,6.7),
+                  xlims=[-0.75,1.380211],ylims=None,vlims=[0.15,0.85],levels=15,xticks=None,yticks=None):
+        '''
+        pltdata needs to contain the defined pltvars.
+        pltvars gives the contour variable (pltvar) and the x and y variables (in that order)
+        cmap defines the colormap which will shade the contours defined by pltvar.
+            By default goes from browns to blues
+        pltvals defines whether the values of pltvar will be annoted to the figure
+        
+        '''
+        #Define the colormap if not given
+        if cmap == None:
+            cmap = sns.diverging_palette(30, 250, l=40,s=80,center="light", as_cmap=True)#sep=1,
+        
+        #Only the variables we care about
+        df = pltdata.loc[:,pltvars]
+        #pltdata = pltdata.loc[:,[pltvar,'LogD','Intensity']]
+        fig, ax = plt.subplots(1,1,figsize = figsize,dpi=300)
+
+        #pltvars = ['LogD','LogI']
+        #pltvars = ["LogD",'Intensity']
+        df = df.pivot(index=pltvars[2],columns=pltvars[1])[pltvars[0]]
+        df = df.interpolate(axis=0,method='spline',order=2)
+        #df = df.interpolate(axis=0,method='nearest')
+
+        #df = df.interpolate(axis=0,method='quadratic')
+        df[np.isnan(df)] = 0
+        if interplims != None:
+            df[df>interplims[1]] = interplims[1]
+            df[df<interplims[0]] = interplims[0]
+
+        #Soil-water differences
+        pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,vmin=vlims[0],vmax=vlims[1],levels=levels)
+        #Other stuff
+        #pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,sep=1)
+        sns.lineplot(x=pltvars[1],y=pltvars[2],data=pltdata.reset_index(),hue='Frequency',
+                     ax=ax,palette=sns.color_palette('Greys')[:len(pltdata.Frequency.unique())],legend=False)
+        #Set values
+        ax.set_xlim(xlims)
+        if xticks != None:
+            ax.set_xticks(xticks[0])
+            ax.set_xticklabels(xticks[1])
+        if yticks != None:
+            ax.set_yticks(yticks[0])
+            ax.set_yticklabels(yticks[1])
+        if pltvals == True:
+            pltdata = pltdata.reset_index()
+            for ind in pltdata.index:
+                ax.annotate(str(pltdata.loc[ind,pltvars[0]]),xy= (pltdata.loc[ind,pltvars[1]],pltdata.loc[ind,pltvars[2]]))
+        fig.colorbar(pc)
+        return fig,ax
         
         
         

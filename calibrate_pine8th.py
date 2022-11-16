@@ -34,12 +34,14 @@ params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
+#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
+#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_3hr.xlsx')
 #Run only for the first event
 timeseries = timeseries[timeseries.time<=6]
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
 #Import a flows if you want it
-flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
-flow_time = pd.read_pickle(flowpath)
+#flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
+#flow_time = pd.read_pickle(flowpath)
 #Instantiate the model
 bc =  BCBlues(locsumm,chemsumm,params,timeseries,numc)
 #Now, run the calibration
@@ -47,13 +49,26 @@ cal_flows = False
 #For flows:
 if cal_flows == True:
     paramnames = ['Kf','Kn','native_depth']
-    param0s = [0.2,0.1,0.1]
+    param0s = [0.20297723,0.1247891,0.1541343]
     cal = bc.calibrate_flows(timeseries,paramnames,param0s)
 else:
     #paramnames = ['Kf','Kn','native_depth']
-    paramnames = ['alpha','thetam']
-    #param0s = [0.69,0.2]
-    param0s = [0.144]
-    bnds = ((0.0,50),(0.0,1.0))#,(0.0,10000))
+    paramnames = ['alpha','wmim']
+    param0s = [0.55519158, 0.005]
+    #param0s = [0.55519158]
+    bnds = ((0.0,50),(0.001,1.0))#,(0.0,10000))
+    #bnds = (0.0,50)
     #cal = calibrate_tracer(timeseries,paramnames,param0s,flows=flow_time)
     cal = bc.calibrate_tracer(timeseries,paramnames,param0s,bounds = bnds,flows=None)
+    
+'''
+Results - 20221027
+Bromide tracer, alpha, thetam
+    #obj = 0.3337582517066263, params = [0.55519243, 0.34502548]
+Bromide - alpha, wmim
+    0.485733737051272 [0.54558032 0.00]
+    
+Flows -  ['Kf','Kn','native_depth']
+    obj - 0.07090380394757101, params = [0.20330968, 0.12166552, 0.15501755]
+
+'''

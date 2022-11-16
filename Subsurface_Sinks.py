@@ -918,10 +918,10 @@ class SubsurfaceSinks(FugModel):
             res_t = res.loc[(slice(None),t,slice(None)),:]
             #For error checking, stop at specific time
             if (t == 771) or (t==290):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
-                pdb.set_trace() #143.39999999996508
+                #pdb.set_trace() #143.39999999996508
                 dangit = 'cute_cat'
             #Call the ADRE code in the FugModel module
-            print(t)
+            #print(t)
             res_t = self.ADRE_1DUSS(res_t,params,numc,dt)
             for j in range(0,len(numc)): #Put sthe results - a value at the next time step and input mass - in the dataframe
                 a_valt1,M_val = 'a'+str(j+1) + '_t1','M'+str(j+1) + '_t1'
