@@ -32,12 +32,14 @@ chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm.loc['Rhodamine','chemcharge'] = 0
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+params.loc['f_apo','val'] = 0
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
 timeseries = timeseries[timeseries.time<=6]
-timeseries.loc[:,['pHwater']] = timeseries.pHwater + 4
-timeseries.loc[:,['pHsubsoil']] = timeseries.pHwater
+timeseries.loc[:,'Rhodamine_n_Min'] = timeseries.Rhodamine_Min
+#timeseries.loc[:,['pHwater']] = timeseries.pHwater + 4
+#timeseries.loc[:,['pHsubsoil']] = timeseries.pHwater
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
 #Check KGE
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_3hr.xlsx')
@@ -52,9 +54,9 @@ for ind, paramname in enumerate(paramnames):
 #Instantiate the model. In this case we will ball the model object "bioretention_cell"
 bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
 #pdb.set_trace()
-calcflow = True#True#False# True# True#
+calcflow = False#True#False# True# True#
 #flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
-flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_flows.pkl'
+flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     mask = timeseries.time>=0
@@ -64,17 +66,17 @@ if calcflow is True:
     flow_time.to_pickle(flowpath)
     #bc.plot_flows(flow_time,Qmeas = flow_time.loc[(slice(None),'pond'),'Q_in'],compartments=['drain','water'],yvar='Q_todrain')
     #Plot whole event
-    bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
+    #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
     #Plot spike event
     bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
                   compartments=['drain','water'],yvar='Q_todrain')
     #Plot latter event
-    #bc.plot_flows(flow_time.loc[flow_time.time>140],Qmeas = timeseries.loc[timeseries.time>140,'Qout_meas'],
-    #              compartments=['drain','water'],yvar='Q_todrain')
+    bc.plot_flows(flow_time.loc[flow_time.time>140],Qmeas = timeseries.loc[timeseries.time>140,'Qout_meas'],
+                  compartments=['drain','water'],yvar='Q_todrain')
     #% infiltrated - actual was ~78%
     inf_pct = 1 - (flow_time.loc[(slice(None),'drain'),'Q_todrain'].sum()/flow_time.loc[(slice(None),'pond'),'Q_in'].sum())
     #timeseries.loc[:,'Q_drainout'] = np.array(flow_time.loc[(slice(None),'drain'),'Q_out'])
-    KGE = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
+    KGE_hydro = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
                           np.array(timeseries.loc[timeseries.time>=0,'Qout_meas']))
     #flow_time.to_pickle(flowpath)
 elif calcflow is None:
@@ -82,18 +84,21 @@ elif calcflow is None:
 else:
     flow_time = pd.read_pickle(flowpath)
 
-codetime = time.time() - codetime
+#codetime = time.time() - codetime
 
 #'''
 #Input calculations
-#inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/inputtest.pkl'   
-inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_inputs.pkl'   
-calcinp = True#False#
+inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/inputspiketest.pkl'   
+#inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_inputs.pkl'   
+calcinp = False#True#
 if calcinp is True:
     input_calcs = bc.input_calc(locsumm,chemsumm,params,pp,numc,timeseries,flow_time=flow_time)
     input_calcs.to_pickle(inpath)
+elif calcinp == None:
+    pass
 else:
     input_calcs = pd.read_pickle(inpath)
+    
 #
 #input_calcs = pd.read_pickle(inpath)
 #'''
@@ -101,20 +106,26 @@ runall = False#None#None#'Load'#'Load'#
 if runall is True:
     res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
 elif runall == 'Load':
-    outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/outputtest.pkl'
+    outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/outputspiketest.pkl'
     res = pd.read_pickle(outpath)
 elif runall == None:
     pass
 else:
     res = bc.run_it(locsumm,chemsumm,params,pp,numc,timeseries,input_calcs=input_calcs)
+
+if runall != None:
+    print(time.time()-codetime)
+    mass_flux = bc.mass_flux(res,numc) #Run to get mass flux
+    mbal = bc.mass_balance(res,numc,mass_flux)
+    Couts = bc.conc_out(numc,timeseries,chemsumm,res,mass_flux)
+    recovery = mass_flux.N_effluent.groupby(level=0).sum()/mass_flux.N_influent.groupby(level=0).sum()
+    bc.plot_Couts(res,Couts.loc[Couts.time<6],multfactor=1e6)
 #res = bc.run_it(locsumm,chemsumm,params,pp,numc,timeseries,input_calcs=input_calcs)
 #res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
-mass_flux = bc.mass_flux(res,numc) #Run to get mass flux
-mbal = bc.mass_balance(res,numc,mass_flux)
-Couts = bc.conc_out(numc,timeseries,chemsumm,res,mass_flux)
+
 #bc.plot_Couts(res,Couts,multfactor=1000)
-#bc.plot_Couts(res,Couts.loc[Couts.time<6],multfactor=1e6)
-recovery = mass_flux.N_effluent.groupby(level=0).sum()/mass_flux.N_influent.groupby(level=0).sum()
+
+
 KGE = {}
 for ind,chem in enumerate(chemsumm.index):
     try:
@@ -127,7 +138,7 @@ plotfig = False
 if plotfig == True:
     #Calculate the masses
     mbal_cum = bc.mass_balance_cumulative(numc, mass_balance = mbal,normalized=True)
-    compound = '6PPDQ'#use same name as in chemsumm
+    compound = 'Rhodamine'#use same name as in chemsumm
     #Set time (hrs), any time after end gives the end.
     time = 8760#1000#6#1000#6#1000
     fig,ax = bc.BC_fig(numc,mass_balance=mbal_cum,time = time,compound=compound,figheight=6,fontsize=7,dpi=300)
@@ -135,5 +146,5 @@ if plotfig == True:
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_results.pkl'
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_simstorm.pkl'
 outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_spiketest.pkl'
-#res.to_pickle(outpath)
+res.to_pickle(outpath)
 #'''

@@ -38,21 +38,21 @@ params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
 fvalveopen = 0.
 
 #Amount of Foc in the soil
-#'''
+'''
 #focfactor = 
 locsumm.loc[['topsoil','subsoil'],'FrnOC'] = 0.4
-#'''
+'''
 #Change infiltration rate in system
 '''
 Kffactor = 0.5
 params.loc['Kf','val'] = Kffactor*params.val.Kf
 '''
 #Changedepth of system
-#'''
+'''
 Dfactor = 2
 #params.loc['Kf','val'] = Kffactor*params.val.Kf
 locsumm.loc[['subsoil'],'Depth'] =locsumm.Depth.subsoil*Dfactor
-#'''
+'''
 #Change the area of the system
 '''
 pdb.set_trace
@@ -88,7 +88,7 @@ pp = None
 Cin = 1000 #ng/L
 Cin = Cin*1e-6 #Convert to g/m³
 #Set up joblib stuff
-n_jobs = (joblib.cpu_count()-4)
+n_jobs = (joblib.cpu_count()-2)
 #Duration is the length of the storm (e.g. 30minutes, 1 hr). Must match the Excel file e.g. 30min, 1hr, 24hr
 #Frequency is the recurrence period (e.g. 100-yr storm)
 durations = ['10min','30min', '1hr','2hr', '6hr','12hr','24hr']
@@ -179,6 +179,6 @@ res.loc[:,'Intensity'] = intensities
 res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
 #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_defaults.pkl'
-outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_results.pkl'
+outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/no_drain.pkl'
 res.to_pickle(outpath)
 #'''
