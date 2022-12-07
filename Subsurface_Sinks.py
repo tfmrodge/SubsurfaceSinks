@@ -588,8 +588,9 @@ class SubsurfaceSinks(FugModel):
                                 Zw_j,D_djk,Deff_j = 'Zw_'+str(j),'D_d'+str(j)+str(k),'Deff_'+str(j)
                                 Zq_k,Zw_k = 'Zq_'+str(k),'Zw_'+str(k)
                                 #Getting the values in the correct cells took some creative indexing here, making this formula complicated.
-                                res.loc[masks,D_djk] = 1/(1/(params.val.ksa*res[masks].Asoilair*np.array(res.Zair[maska]))\
-                                       +y/(res[masks].Asoilair*Bea*np.array(res.Zair[maska])+\
+                                #20221207 - Changed so that diffusion is only driven by the gas-phase Zair. 
+                                res.loc[masks,D_djk] = 1/(1/(params.val.ksa*res[masks].Asoilair*np.array((1-res.phiair[maska])*res.Zair[maska]))\
+                                       +y/(res[masks].Asoilair*Bea*np.array((1-res.phiair[maska])*res.Zair[maska])+\
                                     res[masks].Asoilair*np.array(res.loc[masks,Deff_j])*np.array(res.loc[masks,Zw_j]))) #Dry diffusion
                                 res.loc[maska,D_djk] = np.array(res.loc[masks,D_djk])
         
@@ -717,8 +718,7 @@ class SubsurfaceSinks(FugModel):
                         elif k in ['air']:
                             Zn_j,Zw_k,Zq_k = 'Zn_'+str(j),'Zw_'+str(k),'Zq_'+str(k)
                             #Volatilization to air, only neutral species. Ashoots is the interfacial area
-                            res.loc[mask,'D_dshootsair'] = res.kvv*res.A_shootair*res.loc[:,Zn_j]
-                            
+                            res.loc[mask,'D_dshootsair'] = res.kvv*res.A_shootair*res.loc[:,Zn_j]                   
                             res.loc[mask,'D_rv'] = res.A_shootair * res.loc[:,Zw_k]*rainrate* params.val.Ifw  #Wet dep of gas to shoots
                             res.loc[mask,'D_qv'] = res.A_shootair * res.loc[:,Zq_k]*rainrate\
                                 * params.val.Q * params.val.Ifw #Wet dep of aerosol
@@ -750,8 +750,8 @@ class SubsurfaceSinks(FugModel):
                             Apondair = (pd.DataFrame(np.array(timeseries.loc[(slice(None),'pond'),'Area']),index = timeseries.index.levels[0])).reindex(res.index,level=1).loc[:,0]
                             Apondair[y==0] = 0 #The pond area is based on a minimum surveyed value of 5.74m², if there is no depth there is no area.
                             #Volatilization to air, only neutral species. Ashoots is the interfacial area
-                            res.loc[mask,'D_dairpond'] = 1/(1/(params.val.kma*Apondair[mask]*res.Zair[mask])\
-                                   +y/(Apondair[mask]*res.loc[mask,'D_air']*res[mask].Zair+\
+                            res.loc[mask,'D_dairpond'] = 1/(1/(params.val.kma*Apondair[mask]*(1-res.phiair[mask])*res.Zair[mask])\
+                                   +y/(Apondair[mask]*res.loc[mask,'D_air']*(1-res.phiair[mask])*res[mask].Zair+\
                                 Apondair[mask]*res.loc[mask,'Deff_pond']*res.loc[mask,Zw_k])) #Dry diffusion
                             res.loc[np.isnan(res.D_dairpond),'D_dairpond'] = 0 #Set NaNs to zero
                             try: #Code problem - need different indexing for subsurface sinks vs BC blues.
@@ -766,9 +766,9 @@ class SubsurfaceSinks(FugModel):
                                 res.loc[mask,'D_qp'] = Apondair * res.loc[:,Zq_j]*rainrate.reindex(res.index,level=1)\
                                     * params.val.Q * params.val.Ifw #Wet dep of aerosol
                             res.loc[mask,'D_dp'] = Apondair * res.loc[:,Zq_j] * params.val.Up *Ifd  #dry dep of aerosol
-                            #Overall D values- only diffusion from shoots to air
-                            res.loc[mask,D_jk] = res.loc[:,'D_dairpond']
-                            res.loc[mask,D_kj] = res.loc[:,'D_dairpond'] +res.loc[:,'D_rp']+res.loc[:,'D_qp']+res.loc[:,'D_dp']                            
+                            #Overall D values- only diffusion from pond to air. jk is air-pond, kj is pond-air. 
+                            res.loc[mask,D_jk] = res.loc[:,'D_dairpond'] +res.loc[:,'D_rp']+res.loc[:,'D_qp']+res.loc[:,'D_dp']
+                            res.loc[mask,D_kj] = res.loc[:,'D_dairpond']                  
                         else: #Other compartments Djk = 0.
                             res.loc[mask,D_jk] = 0
                     #Add D_jk to DTj for each compartment.
@@ -917,7 +917,7 @@ class SubsurfaceSinks(FugModel):
             #Feed the time to params
             res_t = res.loc[(slice(None),t,slice(None)),:]
             #For error checking, stop at specific time
-            if (t == 771) or (t==290):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
+            if (t == 287) or (t==290):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
                 #pdb.set_trace() #143.39999999996508
                 dangit = 'cute_cat'
             #Call the ADRE code in the FugModel module

@@ -433,11 +433,6 @@ class FugModel(metaclass=ABCMeta):
             M_t =  params.val.Qin*res.loc[(slice(None),slice(None),res.dm0),'bc_us']\
             *dt*res.loc[(slice(None),slice(None),res.dm0),'Z1']
             res.loc[res.dm0,'Min'] = M_t
-        #Case 1 - both xb and xf are outside the domain. 
-        #All mass (moles) comes in at the influent activity & Z value (set to the first cell)
-        #pdb.set_trace()
-        mask = (res.xb == 0) & (res.xf == 0)
-        M_us = 0
         res.loc[:,'inp_mass1'] = 0 #initialize
         #If there is a ponding zone, we will split the particles out.
         #pdb.set_trace()
@@ -481,11 +476,17 @@ class FugModel(metaclass=ABCMeta):
             res.loc[:,'Mqin'] = 0
             res.loc[:,'Min_p'] = res.loc[:,'Min']
 
-
+        #Case 1 - both xb and xf are outside the domain. 
+        #All mass (moles) comes in at the influent activity & Z value (set to the first cell)
+        #pdb.set_trace() #xx = res.loc[:,['xb','xf']]
+        mask = (res.xb == 0) & (res.xf == 0)
+        M_us = 0
         if sum(mask) != 0:
-            #res[mask].groupby(level = 0)['del_0'].sum()
+            #res[mask].groupby(level = 0)[''].sum()
             if params.val.Pulse == True:
-                M_in = res.Min_p[mask]/(res.Qin[mask])*res.del_0[mask] #Mass from pulse in cells
+                #20221207 - this equation was wrong, changed to fraction of time across cell/total influent time (dt)
+                #M_in = res.Min_p[mask]/(res.Qin[mask]*res.del_0[mask] #Mass from pulse in cells
+                M_in = res.Min_p[mask]*(res.del_0[mask]/dt) #Mass from pulse in cells
                 M_in[np.isnan(M_in)] = 0 #If Qin is zero
                 res.loc[mask,'M_star'] = M_in
             else:
@@ -504,7 +505,7 @@ class FugModel(metaclass=ABCMeta):
             #c1 BCs and this case, which will only ever have one cell as long as Xf(i-1) = xb(i)
             if params.val.Pulse == True:
                 try:
-                    M_t = res.Min_p[mask] - np.array(M_us) #Any remaining mass goes in this cell
+                    M_t = res.Min_p[res.dm0] - np.array(M_us) #Any remaining mass goes in this cell
                     M_t[np.isnan(M_t)] = 0 #If Qin is zero
                 except ValueError:
                     M_t = 0

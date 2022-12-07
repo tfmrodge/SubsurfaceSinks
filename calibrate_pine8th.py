@@ -29,7 +29,8 @@ numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','p
 locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
 #Only bromide
 chemsumm = pd.read_excel('inputfiles/Br_CHEMSUMM.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
+#Only rhodamine
+#chemsumm = pd.read_excel('inputfiles/CHEMSUMM_rhodamine.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
@@ -52,14 +53,17 @@ if cal_flows == True:
     param0s = [0.20297723,0.1247891,0.1541343]
     cal = bc.calibrate_flows(timeseries,paramnames,param0s)
 else:
-    #paramnames = ['Kf','Kn','native_depth']
-    paramnames = ['alpha','wmim']
+    #paramnames = ['AF_soil']
+    #param0s = [55.0416069]
+    #bnds = ((1e-6,100.),)
+    tol = 1e-3
+    paramnames = ['alpha','thetam','wmim']
     param0s = [0.55519158, 0.005]
-    #param0s = [0.55519158]
-    bnds = ((0.0,50),(0.001,1.0))#,(0.0,10000))
-    #bnds = (0.0,50)
+    bnds = ((0.0,50),(0.001,1.0),(0.0,100))
+    #,(0.0,10000))
+    
     #cal = calibrate_tracer(timeseries,paramnames,param0s,flows=flow_time)
-    cal = bc.calibrate_tracer(timeseries,paramnames,param0s,bounds = bnds,flows=None)
+    cal = bc.calibrate_tracer(timeseries,paramnames,param0s,bounds = bnds,tolerance = tol,flows=None)
     
 '''
 Results - 20221027
@@ -67,6 +71,7 @@ Bromide tracer, alpha, thetam
     #obj = 0.3337582517066263, params = [0.55519243, 0.34502548]
 Bromide - alpha, wmim
     0.485733737051272 [0.54558032 0.00]
+Rhodamine - AF_soil
     
 Flows -  ['Kf','Kn','native_depth']
     obj - 0.07090380394757101, params = [0.20330968, 0.12166552, 0.15501755]

@@ -19,8 +19,8 @@ from hydroeval import kge #Kling-Gupta efficiency (Kling-Gupta et al., 2009)
 import hydroeval
 from scipy.optimize import minimize
 import psutil
-#simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
-#simplefilter(action="ignore", category= RuntimeWarning)
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+simplefilter(action="ignore", category= RuntimeWarning)
 
 
 class BCBlues(SubsurfaceSinks):
@@ -1077,9 +1077,12 @@ class BCBlues(SubsurfaceSinks):
         #pltdata = res_time #All times at once
         fig,axs = plt.subplots(int(np.ceil(numchems/3)),3,figsize=(15,8),dpi=300)
         for ind,ax in enumerate(axs.reshape(-1)): 
-            pltdf = Couts[pltnames[ind+1]]
-            sns.lineplot(x = pltdata.time, y = pltdf*multfactor,ax=ax)
-            ax.set_ylim(ylim)
+            try:
+                pltdf = Couts[pltnames[ind+1]]
+                sns.lineplot(x = pltdata.time, y = pltdf*multfactor,ax=ax)
+                ax.set_ylim(ylim)
+            except IndexError:
+                pass
         #ax[0].set_ylim(ylim)
         #ax.set_ylabel(ylabel, fontsize=20)
         #ax.set_xlabel(xlabel, fontsize=20)
@@ -1128,7 +1131,7 @@ class BCBlues(SubsurfaceSinks):
         #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
         return res
         
-    def calibrate_tracer(self,timeseries,paramnames,param0s,bounds,flows = None,):
+    def calibrate_tracer(self,timeseries,paramnames,param0s,bounds,tolerance=1e-5,flows = None,):
         '''
         Calibrate based on measured effluent concentration in the "timeseries"
         file and a test parameter name (string) and initial value (param0)
@@ -1181,7 +1184,7 @@ class BCBlues(SubsurfaceSinks):
         #ins = [param0]
         #bnds = ((0.0,1.0),(0.0,1.0),(0.0,10000))
         #bnds = ((0.0,1.0),(0.0,1.0))#,(0.0,1.0))
-        res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',tol=1e-3,options={'disp': True,'maxfun':100})
+        res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',tol=tolerance,options={'disp': True,'maxfun':100})
         #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='SLSQP',options={'disp': True})
         #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
         return res 
