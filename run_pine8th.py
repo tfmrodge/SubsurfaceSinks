@@ -21,6 +21,7 @@ import hydroeval
 pdb.set_trace()
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 codetime = time.time()
+pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 #For the vancouver tree trench, no ponding zone. 
 #numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
@@ -32,12 +33,17 @@ chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm.loc['Rhodamine','chemcharge'] = 0
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
-params.loc['f_apo','val'] = 0
+#params.loc['f_apo','val'] = 0
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
-timeseries = timeseries[timeseries.time<=6]
-timeseries.loc[:,'Rhodamine_n_Min'] = timeseries.Rhodamine_Min
+#Dfactor = 2
+#params.loc['Kf','val'] = Kffactor*params.val.Kf
+#locsumm.loc[['subsoil'],'Depth'] =locsumm.Depth.subsoil*Dfactor 
+
+#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_30s.xlsx')
+#timeseries = timeseries[timeseries.time<=6]
+#timeseries.loc[:,'Rhodamine_n_Min'] = timeseries.Rhodamine_Min
 #timeseries.loc[:,['pHwater']] = timeseries.pHwater + 4
 #timeseries.loc[:,['pHsubsoil']] = timeseries.pHwater
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
@@ -53,17 +59,30 @@ for ind, paramname in enumerate(paramnames):
 #timeseries = pd.read_excel('inputfiles/timeseries_2014.xlsx')
 #Instantiate the model. In this case we will ball the model object "bioretention_cell"
 bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
+#Change the timestep
+timedfname = 'mod_timeseries.pkl'
+#How much should we modify the time-step. Multiply the index by this number. 
+indfactor = 3#'Load' #3#3
+if indfactor == 'Load':
+    timeseries = pd.read_pickle(pklpath+timedfname)
+else:
+    try: 
+        int(indfactor) == indfactor
+        timeseries = bc.modify_timestep(timeseries,indfactor)
+    except TypeError:
+        pass
+    
 #pdb.set_trace()
-calcflow = False#True#False# True# True#
-#flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
-flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
+calcflow = True#True#False# True# True#
+flowname = 'flowtest.pkl'
+#flowpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/flowtest_30s.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     mask = timeseries.time>=0
     minslice = np.min(np.where(mask))
     maxslice = np.max(np.where(mask))#minslice + 5 #
     flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
-    flow_time.to_pickle(flowpath)
+    flow_time.to_pickle(pklpath+flowname)
     #bc.plot_flows(flow_time,Qmeas = flow_time.loc[(slice(None),'pond'),'Q_in'],compartments=['drain','water'],yvar='Q_todrain')
     #Plot whole event
     #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
@@ -82,22 +101,23 @@ if calcflow is True:
 elif calcflow is None:
     pass
 else:
-    flow_time = pd.read_pickle(flowpath)
+    flow_time = pd.read_pickle(pklpath+flowname)
 
 #codetime = time.time() - codetime
 
 #'''
 #Input calculations
-inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/inputspiketest.pkl'   
+#inpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/inputspiketest_30s.pkl'  
+inname = 'inputspiketest.pkl'    
 #inpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_inputs.pkl'   
-calcinp = False#True#
+calcinp = True#False#
 if calcinp is True:
     input_calcs = bc.input_calc(locsumm,chemsumm,params,pp,numc,timeseries,flow_time=flow_time)
-    input_calcs.to_pickle(inpath)
+    #input_calcs.to_pickle(pklpath+inname)
 elif calcinp == None:
     pass
 else:
-    input_calcs = pd.read_pickle(inpath)
+    input_calcs = pd.read_pickle(pklpath+inname)
     
 #
 #input_calcs = pd.read_pickle(inpath)
@@ -106,8 +126,8 @@ runall = False#None#None#'Load'#'Load'#
 if runall is True:
     res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
 elif runall == 'Load':
-    outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/outputspiketest.pkl'
-    res = pd.read_pickle(outpath)
+    outname = 'outputspiketest.pkl'
+    res = pd.read_pickle(pklpath+outname)
 elif runall == None:
     pass
 else:
@@ -115,11 +135,13 @@ else:
 
 if runall != None:
     print(time.time()-codetime)
+    outname = 'outputspiketest.pkl'
+    #res.to_pickle(pklpath+outname)
     mass_flux = bc.mass_flux(res,numc) #Run to get mass flux
     mbal = bc.mass_balance(res,numc,mass_flux)
     Couts = bc.conc_out(numc,timeseries,chemsumm,res,mass_flux)
     recovery = mass_flux.N_effluent.groupby(level=0).sum()/mass_flux.N_influent.groupby(level=0).sum()
-    bc.plot_Couts(res,Couts.loc[Couts.time<6],multfactor=1e6)
+    #bc.plot_Couts(res,Couts.loc[Couts.time<6],multfactor=1e6)
 #res = bc.run_it(locsumm,chemsumm,params,pp,numc,timeseries,input_calcs=input_calcs)
 #res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
 
@@ -145,6 +167,7 @@ if plotfig == True:
 #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_results.pkl'
 #outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_simstorm.pkl'
-outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_spiketest.pkl'
-res.to_pickle(outpath)
+#outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/6PPDQ_spiketest.pkl'
+#outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/6PPDQ_spiketest_30s.pkl'
+
 #'''
