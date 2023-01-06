@@ -14,13 +14,14 @@ from BioretentionBlues import BCBlues
 from HelperFuncs import df_sliced_index
 import pdb
 import time
+import itertools
 #from hydroeval import kge #Kling-Gupta efficiency (Kling-Gupta et al., 2009)
 #import hydroeval
 import joblib
 from joblib import Parallel, delayed
 #Testing the modelres
 #Load parameterization files
-#What pdb.set_trace()
+pdb.set_trace()
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 tstart = time.time()
 #For the vancouver tree trench, no ponding zone. 
@@ -34,53 +35,56 @@ chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
 
 #Design Tests
-#Change underdrain valve opening (set to 0 for no underdrain flow), comment out to keep timeseries values.
-fvalveopen = 0.
-
-#Amount of Foc in the soil
-'''
-#focfactor = 
-locsumm.loc[['topsoil','subsoil'],'FrnOC'] = 0.4
-'''
-#Change infiltration rate in system
-'''
-Kffactor = 0.5
-params.loc['Kf','val'] = Kffactor*params.val.Kf
-'''
-#Changedepth of system
-'''
-Dfactor = 2
-#params.loc['Kf','val'] = Kffactor*params.val.Kf
-locsumm.loc[['subsoil'],'Depth'] =locsumm.Depth.subsoil*Dfactor
-'''
-#Change the area of the system
-'''
-pdb.set_trace
-Afactor = 2.0
-locsumm.loc[['water','topsoil','subsoil','air',
-             'drain','drain_pores','native_soil','native_pores'],'Area'] =21.8*Afactor
-params.loc['BC_Area_curve','val'] = np.array2string(np.array(params.val.BC_Area_curve.split(",")
-                                                             ,dtype='float')*Afactor,separator=",")[1:-1]
-params.loc['BC_Volume_Curve','val'] = np.array2string(np.array(params.val.BC_Volume_Curve.split(",")
-                                                             ,dtype='float')*Afactor,separator=",")[1:-1]
-'''
-#Change ponding height
-'''
-Weirfactor = 2
-params.loc['Hw','val'] = params.val.Hw*Weirfactor
-Ds = np.array(params.val.BC_Depth_Curve.split(","),dtype='float')
-step = (Ds[1]-Ds[0])
-numsteps = int((params.val.Hw - max(Ds))/step)
-Ds = np.concatenate((Ds,np.linspace(max(Ds)+step,params.val.Hw,numsteps)))
-#Change the areas to match - we will just keep using the top area.
-As = np.array(params.val.BC_Area_curve.split(","),dtype='float')
-As = np.concatenate((As,np.zeros(numsteps)+max(As)))
-Vs = np.array(params.val.BC_Volume_Curve.split(","),dtype='float')
-Vs =  np.concatenate((Vs,((np.zeros(numsteps)+max(As))*step).cumsum()+max(Vs)))
-params.loc['BC_Depth_Curve','val'] = np.array2string(Ds,separator=",")[1:-1]
-params.loc['BC_Area_curve','val'] = np.array2string(As,separator=",")[1:-1]
-params.loc['BC_Volume_Curve','val'] = np.array2string(Vs,separator=",")[1:-1]
-'''
+def design_tests(scenario_dict):
+    #Re-initialize
+    locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
+    params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+    #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
+    if scenario_dict['fvalve'] == True:  
+        params.loc['fvalveopen','val'] = 0
+    else: params.loc['fvalveopen','val'] = None
+    
+    #Amount of Foc in the soil (Foc)
+    if scenario_dict['Foc'] == True:   
+        #focfactor = 
+        locsumm.loc[['subsoil'],'FrnOC'] = 0.4
+    
+    #Change infiltration rate in system (Kinf)
+    if scenario_dict['Kinf'] == True: 
+        Kffactor = 0.5
+        params.loc['Kf','val'] = Kffactor*params.val.Kf
+    #Changedepth of system (Dsys)
+    if scenario_dict['Dsys'] == True:     
+        Dfactor = 2
+        #params.loc['Kf','val'] = Kffactor*params.val.Kf
+        locsumm.loc[['subsoil','rootbody','rootxylem','rootcyl'],'Depth'] =locsumm.Depth.subsoil*Dfactor    
+    #Change the area of the system (Asys)
+    if scenario_dict['Asys'] == True:   
+        #pdb.set_trace
+        Afactor = 2.0
+        locsumm.loc[['water','topsoil','subsoil','air',
+                     'drain','drain_pores','native_soil','native_pores'],'Area'] =21.8*Afactor
+        params.loc['BC_Area_curve','val'] = np.array2string(np.array(params.val.BC_Area_curve.split(",")
+                                                                     ,dtype='float')*Afactor,separator=",")[1:-1]
+        params.loc['BC_Volume_Curve','val'] = np.array2string(np.array(params.val.BC_Volume_Curve.split(",")
+                                                                     ,dtype='float')*Afactor,separator=",")[1:-1]    
+    #Change ponding height (Hp)
+    if scenario_dict['Hp'] == True:
+        Weirfactor = 2
+        params.loc['Hw','val'] = params.val.Hw*Weirfactor
+        Ds = np.array(params.val.BC_Depth_Curve.split(","),dtype='float')
+        step = (Ds[1]-Ds[0])
+        numsteps = int((params.val.Hw - max(Ds))/step)
+        Ds = np.concatenate((Ds,np.linspace(max(Ds)+step,params.val.Hw,numsteps)))
+        #Change the areas to match - we will just keep using the top area.
+        As = np.array(params.val.BC_Area_curve.split(","),dtype='float')
+        As = np.concatenate((As,np.zeros(numsteps)+max(As)))
+        Vs = np.array(params.val.BC_Volume_Curve.split(","),dtype='float')
+        Vs =  np.concatenate((Vs,((np.zeros(numsteps)+max(As))*step).cumsum()+max(Vs)))
+        params.loc['BC_Depth_Curve','val'] = np.array2string(Ds,separator=",")[1:-1]
+        params.loc['BC_Area_curve','val'] = np.array2string(As,separator=",")[1:-1]
+        params.loc['BC_Volume_Curve','val'] = np.array2string(Vs,separator=",")[1:-1]
+    return locsumm, params
 
 
 pp = None
@@ -104,10 +108,11 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #First, we will define the timeseries based on the duration. Probably better to put this i/o step out of the loop but w/e
     timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
     #Test if no underdrain - has to be after timeseries is imported.
-    try:
-        timeseries.loc[timeseries.time>0,'fvalveopen'] = fvalveopen
-    except NameError:
-        pass
+    if params.loc['fvalveopen','val'] != None:
+        timeseries.loc[timeseries.time>0,'fvalveopen'] = params.loc['fvalveopen','val']
+    #try:     
+    #except NameError:
+    #    pass
     #Define the Qin and rain rate based on the frequency
     timeseries.loc[:,'Qin'] = timeseries.loc[:,dur_freq[1] + '_Qin']
     timeseries.loc[:,'RainRate'] = timeseries.loc[:,dur_freq[1] + '_RainRate']
@@ -130,11 +135,15 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     res.loc[:,'pct_overflow'] = np.array((mass_flux.loc[:,['Nadvpond']].sum(axis=1).groupby(level=0).sum())/denom)
     res.loc[:,'pct_stormsewer'] = np.array((mass_flux.loc[:,['N_effluent',
                                'Nadvpond']].sum(axis=1).groupby(level=0).sum())/denom)
+    #res.loc[:,'pct_Qover'] = flow_time.loc[(slice(None),'pond'),'Q_todrain'].sum()\
+    #    /flow_time.loc[(slice(None),'pond'),'Q_in'].sum()
     #Look at Concentration Reduction
     #Storm Sewer Concentration = (Ceff*Qeff+Cpond*Qover)/(Qeff+Qover)
     numx = len(model_outs.index.levels[2])-1
     Q_stormsewer = np.array(model_outs.loc[(slice(None),slice(None),numx-1),'Qout'])\
         + np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'])
+    res.loc[:,'pct_Qover'] = np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'])\
+                                      /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'])
     #Mean Effluent Concentration (ng/L)
     res.loc[:,'MEC_ngl'] = 1e6*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1).groupby(level=[0,1]).sum())\
                                     /np.array(Q_stormsewer)).groupby(level=0).mean()*chemsumm.loc[:,'MolMass']
@@ -155,30 +164,51 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #res.loc[:,'QLOC_05'] = 2/ldt*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1)*mass_flux.dt).groupby(level=[0,1]).sum().groupby(level=0).sum()\
     #       -np.array(Q_stormsewer)*ldt[0]).groupby(level=0).sum()
     return res
+
+
 numtrials = (len(durations)*len(frequencies))
 dur_freqs = []#np.zeros((numtrials, 2),dtype=str)
 #ind = 0
-
 for duration in durations:
     for freq in frequencies:
         dur_freqs.append([str(duration),str(freq)])#[ind,:] = [str(duration),str(freq)]
         #ind += 1
+#Set up loop through scenarios
+scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+#import pdb
+#params = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+#list(itertools.combinations(params,6))
+#Set up combinations - all possible
+#combos = ((1,1,0,0,1,0),(1,1,0,0,0,0),(0,1,0,1,0,0))
+combos = ((1,0,0,1,0,0),(0,0,0,0,0,0))
+#all possible
+#combos = list(itertools.product([0,1],repeat=6))
 #pdb.set_trace()
-#chemsumm = chemsumm.loc['6PPDQ']
-#for dur_freq in dur_freqs:
-#    dur_freq = dur_freqs[10]
-#    res = run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq)
-res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm,chemsumm,params,numc,Cin,dur_freq) for dur_freq in dur_freqs)
-codetime = time.time()-tstart
-res = pd.concat(res)
-#For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
-res = res.loc['6PPDQ',:] 
-res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
-res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
-res.loc[:,'Intensity'] = intensities
-res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
-#bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_defaults.pkl'
-outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/no_drain.pkl'
-res.to_pickle(outpath)
+for combo in combos:
+    for ind, param in enumerate(scenario_dict):        
+        scenario_dict[param] = bool(combo[ind])
+#for scenario in scenario_dict:
+    #scenario_dict[scenario] = True
+    locsumm, params = design_tests(scenario_dict)
+    #pdb.set_trace()
+    #chemsumm = chemsumm.loc['6PPDQ']
+    for dur_freq in dur_freqs:
+        #dur_freq = dur_freqs[10]
+        res = run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq)
+    #res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm,chemsumm,params,numc,Cin,dur_freq) for dur_freq in dur_freqs)
+    #codetime = time.time()-tstart
+    res = pd.concat(res)
+    #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
+    res = res.loc['6PPDQ',:] 
+    res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
+    res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
+    res.loc[:,'Intensity'] = intensities
+    res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
+    #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
+    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    filtered = [k for k,v in scenario_dict.items() if v == True]
+    
+    outname = 'IDF_'+'_'.join(filtered)+'.pkl'
+    res.to_pickle(outpath+outname)
+    #scenario_dict[scenario] = False
 #'''

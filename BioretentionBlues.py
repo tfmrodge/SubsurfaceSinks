@@ -21,7 +21,7 @@ from scipy.optimize import minimize
 import psutil
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 simplefilter(action="ignore", category= RuntimeWarning)
-
+simplefilter(action="ignore", category= FutureWarning)
 
 class BCBlues(SubsurfaceSinks):
     """Bioretention cell implementation of the Subsurface_Sinks model.
@@ -1008,7 +1008,8 @@ class BCBlues(SubsurfaceSinks):
         #ax = sns.lineplot(data = pltdata,x = 'time',hue = pltdata.index.get_level_values(1),y=yvar)
         #ax = plt.plot()
         for comp in compartments:            
-            ax.plot(flow_time.loc[(mask,comp),'time'],flow_time.loc[(mask,comp),yvar])
+            #mask = flow_time.time>=0
+            ax.plot(flow_time.loc[(mask.copy(),comp),'time'],flow_time.loc[(mask.copy(),comp),yvar])
         #ax2 = sns.lineplot(x = pltdata2.loc[(slice(None),'pond'),'time'],hue = pltdata2.index.get_level_values(1),y='Depth',data = pltdata2)
         #ax2.set_xlim(xlim)
         #ax.set_ylim(ylim)#KGE
@@ -1131,7 +1132,8 @@ class BCBlues(SubsurfaceSinks):
         #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
         return res
         
-    def calibrate_tracer(self,timeseries,paramnames,param0s,bounds,tolerance=1e-5,flows = None,):
+    def calibrate_tracer(self,timeseries,paramnames,param0s,bounds,
+                         tolerance=1e-5,flows=None,objective=None):
         '''
         Calibrate based on measured effluent concentration in the "timeseries"
         file and a test parameter name (string) and initial value (param0)
@@ -1165,18 +1167,22 @@ class BCBlues(SubsurfaceSinks):
                     res = pd.read_pickle(flows)
                 res = self.input_calc(locsummtest,self.chemsumm,paramtest,self.pp,self.numc,timeseries,flow_time=res)
                 res = self.run_it(locsummtest,self.chemsumm,paramtest,self.pp,self.numc,timeseries,input_calcs=res)                
-                mass_flux = self.mass_flux(res,self.numc) 
-                Couts = self.conc_out(self.numc,timeseries,self.chemsumm,res,mass_flux)
-                KGE = []
-                for ind,chem in enumerate(self.chemsumm.index):
-                    KGE.append((hydroeval.evaluator(kge, np.array(Couts.loc[:,chem+'_Coutest']),\
-                                      np.array(Couts.loc[:,chem+'_Coutmeas'])))[0])
-                #timeseries.loc[:,'Q_drainout'] = np.array(flowtest.loc[(slice(None),'drain'),'Q_todrain'])
-                #Kling-Gupta Efficiency (modified Nash-Sutcliffe) can be our measure of model performance
-                #If multiple compounds given, this just takes the average.
-                eff = np.mean(KGE)
-                #An efficiency of 1 is ideal, therefore we want to see how far it is from 1
-                obj = (1-eff)
+                mass_flux = self.mass_flux(res,self.numc)                 
+                if objective == None:
+                    Couts = self.conc_out(self.numc,timeseries,self.chemsumm,res,mass_flux)
+                    KGE = []
+                    for ind,chem in enumerate(self.chemsumm.index):
+                        KGE.append((hydroeval.evaluator(kge, np.array(Couts.loc[:,chem+'_Coutest']),\
+                                          np.array(Couts.loc[:,chem+'_Coutmeas'])))[0])
+                    #timeseries.loc[:,'Q_drainout'] = np.array(flowtest.loc[(slice(None),'drain'),'Q_todrain'])
+                    #Kling-Gupta Efficiency (modified Nash-Sutcliffe) can be our measure of model performance
+                    #If multiple compounds given, this just takes the average.
+                    eff = np.mean(KGE)
+                    #An efficiency of 1 is ideal, therefore we want to see how far it is from 1
+                    obj = (1-eff)
+                else:
+                    recovery = mass_flux.N_effluent.groupby(level=0).sum()/mass_flux.N_influent.groupby(level=0).sum()
+                    obj = abs(objective['recovery']-recovery)
                 print(obj,param)
             return obj
         
@@ -1241,6 +1247,43 @@ class BCBlues(SubsurfaceSinks):
                 ax.annotate(str(pltdata.loc[ind,pltvars[0]]),xy= (pltdata.loc[ind,pltvars[1]],pltdata.loc[ind,pltvars[2]]))
         fig.colorbar(pc)
         return fig,ax
+    
+    def modify_timestep(self,timeseries,indfactor):
+        #pdb.set_trace()
+        chemsumm = self.chemsumm
+        negtimeseries = timeseries.loc[timeseries.time<0,:].copy()
+        timeseries = timeseries.loc[timeseries.time>=0,:].copy()
+        timeseries.reset_index(inplace=True,drop=True)
+        newind = pd.RangeIndex(0,max(timeseries.index)*indfactor+1,step=1)
+        nts = pd.DataFrame(index=newind,columns =timeseries.columns)
+        nt_dtypes = timeseries.dtypes.to_dict()
+        nt_dtypes['RainRate'] = np.dtype('float64')
+        nt_dtypes['6PPD_Min'] = np.dtype('float64')
+        nts = nts.astype(nt_dtypes)
+        ind = 0
+        while ind < len(nts.index):
+            #print(ind)
+            nts.loc[ind,:] = timeseries.loc[(ind)/indfactor,:]
+            ind += indfactor
+        nts = nts.interpolate(method='linear')
+        #Now, reset the ones that need it! 
+        nts.loc[:,'dt'] = nts.time.shift(-1)-nts.time
+        nts.loc[nts.index[-1],'dt'] = nts.loc[nts.index[-2],'dt']
+        #pdb.set_trace()
+        for ind,chem in enumerate(chemsumm.index):
+            try:
+                nts.loc[:,chem+'_Min'] = 0
+                oldspike = min(timeseries[timeseries.loc[:,chem+'_Min']>0].index)
+                newspike = oldspike*indfactor
+                spikelen = len(timeseries[timeseries.loc[:,chem+'_Min']>0].index)*indfactor
+                nts.loc[newspike:newspike+spikelen-1,chem+'_Min'] = timeseries.loc[:,chem+'_Min'].sum()/spikelen
+                #nts.loc[nts.index[-1],'dt'] 
+            except KeyError:
+                pass
+        nts = negtimeseries.append(nts)
+        nts.reset_index(inplace=True,drop=True)
+        return nts
+        
         
         
         
