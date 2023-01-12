@@ -119,6 +119,7 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
     bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
     #Next, run the model!
+    #flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
     mass_flux = bc.mass_flux(model_outs,numc) #Run to get mass flux
     denom = mass_flux.N_influent.groupby(level=0).sum()
@@ -142,8 +143,8 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     numx = len(model_outs.index.levels[2])-1
     Q_stormsewer = np.array(model_outs.loc[(slice(None),slice(None),numx-1),'Qout'])\
         + np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'])
-    res.loc[:,'pct_Qover'] = np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'])\
-                                      /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'])
+    res.loc[:,'pct_Qover'] = np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'].sum())\
+                                      /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'].sum())
     #Mean Effluent Concentration (ng/L)
     res.loc[:,'MEC_ngl'] = 1e6*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1).groupby(level=[0,1]).sum())\
                                     /np.array(Q_stormsewer)).groupby(level=0).mean()*chemsumm.loc[:,'MolMass']
@@ -180,22 +181,30 @@ scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asy
 #list(itertools.combinations(params,6))
 #Set up combinations - all possible
 #combos = ((1,1,0,0,1,0),(1,1,0,0,0,0),(0,1,0,1,0,0))
-combos = ((1,0,0,1,0,0),(0,0,0,0,0,0))
+#combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0))
+#combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
 #combos = list(itertools.product([0,1],repeat=6))
+combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0),(0,0,0,1,0,0),)
 #pdb.set_trace()
 for combo in combos:
+    scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
     for ind, param in enumerate(scenario_dict):        
         scenario_dict[param] = bool(combo[ind])
+    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    filtered = [k for k,v in scenario_dict.items() if v == True]
+    outname = 'IDF_'+'_'.join(filtered)+'.pkl'
+    #if outname in os.listdir(outpath):
+    #    continue #Skip if already done
 #for scenario in scenario_dict:
     #scenario_dict[scenario] = True
-    locsumm, params = design_tests(scenario_dict)
+    locsumm_test, params_test = design_tests(scenario_dict)
     #pdb.set_trace()
     #chemsumm = chemsumm.loc['6PPDQ']
-    for dur_freq in dur_freqs:
-        dur_freq = dur_freqs[22] #22 = 12h 100yr
-        res = run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq)
-    #res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm,chemsumm,params,numc,Cin,dur_freq) for dur_freq in dur_freqs)
+    #for dur_freq in dur_freqs:
+        #dur_freq = dur_freqs[10]
+    #    res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+    res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
     #codetime = time.time()-tstart
     res = pd.concat(res)
     #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
@@ -205,10 +214,7 @@ for combo in combos:
     res.loc[:,'Intensity'] = intensities
     res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
     #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
-    filtered = [k for k,v in scenario_dict.items() if v == True]
     
-    outname = 'IDF_'+'_'.join(filtered)+'.pkl'
     res.to_pickle(outpath+outname)
     #scenario_dict[scenario] = False
 #'''
