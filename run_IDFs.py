@@ -193,7 +193,7 @@ for combo in combos:
     #pdb.set_trace()
     #chemsumm = chemsumm.loc['6PPDQ']
     for dur_freq in dur_freqs:
-        #dur_freq = dur_freqs[10]
+        dur_freq = dur_freqs[22] #22 = 12h 100yr
         res = run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq)
     #res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm,chemsumm,params,numc,Cin,dur_freq) for dur_freq in dur_freqs)
     #codetime = time.time()-tstart

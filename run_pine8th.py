@@ -32,37 +32,26 @@ chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm.loc['Rhodamine','pKa'] = 999
 #chemsumm.loc['Rhodamine','chemcharge'] = 0
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
 #params.loc['f_apo','val'] = 0
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
-#Dfactor = 2
-#params.loc['Kf','val'] = Kffactor*params.val.Kf
-#locsumm.loc[['subsoil'],'Depth'] =locsumm.Depth.subsoil*Dfactor 
-
-#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_30s.xlsx')
+#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
+#timeseries = pd.read_excel('inputfiles/timeseries_wateryear.xlsx')
+#Run only for the first event
 #timeseries = timeseries[timeseries.time<=6]
-#timeseries.loc[:,'Rhodamine_n_Min'] = timeseries.Rhodamine_Min
-#timeseries.loc[:,['pHwater']] = timeseries.pHwater + 4
-#timeseries.loc[:,['pHsubsoil']] = timeseries.pHwater
+#timeseries = timeseries[timeseries.time<=240]
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
-#Check KGE
-#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_3hr.xlsx')
-#Changing parameters for testing
-'''
-paramnames = ['alpha','thetam']
-paramvals = [0.55519243, 0.34502549]
-for ind, paramname in enumerate(paramnames):
-    params.loc[paramname,'val'] = paramvals[ind]
-'''
-#timeseries = pd.read_excel('inputfiles/timeseries_2014.xlsx')
-#Instantiate the model. In this case we will ball the model object "bioretention_cell"
-bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
-#Change the timestep
+#Import a flows if you want it
+#flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
+#flow_time = pd.read_pickle(flowpath)
+#Instantiate the model
+bc =  BCBlues(locsumm,chemsumm,params,timeseries,numc)
+pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 timedfname = 'mod_timeseries.pkl'
 #How much should we modify the time-step. Multiply the index by this number. 
-indfactor = 3#'Load' #3#3
+indfactor = 3#1#3#'Load' #3#3
 if indfactor == 'Load':
     timeseries = pd.read_pickle(pklpath+timedfname)
 else:
@@ -87,16 +76,19 @@ if calcflow is True:
     #Plot whole event
     #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
     #Plot spike event
-    bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
-                  compartments=['drain','water'],yvar='Q_todrain')
-    #Plot latter event
-    bc.plot_flows(flow_time.loc[flow_time.time>140],Qmeas = timeseries.loc[timeseries.time>140,'Qout_meas'],
-                  compartments=['drain','water'],yvar='Q_todrain')
-    #% infiltrated - actual was ~78%
-    inf_pct = 1 - (flow_time.loc[(slice(None),'drain'),'Q_todrain'].sum()/flow_time.loc[(slice(None),'pond'),'Q_in'].sum())
-    #timeseries.loc[:,'Q_drainout'] = np.array(flow_time.loc[(slice(None),'drain'),'Q_out'])
-    KGE_hydro = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
-                          np.array(timeseries.loc[timeseries.time>=0,'Qout_meas']))
+    try:
+        bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
+                      compartments=['drain','water'],yvar='Q_todrain')
+        #Plot latter event
+        bc.plot_flows(flow_time.loc[flow_time.time>140],Qmeas = timeseries.loc[timeseries.time>140,'Qout_meas'],
+                      compartments=['drain','water'],yvar='Q_todrain')
+        #% infiltrated - actual was ~78%
+        inf_pct = 1 - (flow_time.loc[(slice(None),'drain'),'Q_todrain'].sum()/flow_time.loc[(slice(None),'pond'),'Q_in'].sum())
+        #timeseries.loc[:,'Q_drainout'] = np.array(flow_time.loc[(slice(None),'drain'),'Q_out'])
+        KGE_hydro = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
+                              np.array(timeseries.loc[timeseries.time>=0,'Qout_meas']))
+    except KeyError:
+        pass
     #flow_time.to_pickle(flowpath)
 elif calcflow is None:
     pass
@@ -121,7 +113,7 @@ else:
     
 #
 #input_calcs = pd.read_pickle(inpath)
-#'''
+
 runall = False#None#None#'Load'#'Load'#
 if runall is True:
     res = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
@@ -135,8 +127,8 @@ else:
 
 if runall != None:
     print(time.time()-codetime)
-    outname = 'outputspiketest.pkl'
-    #res.to_pickle(pklpath+outname)
+    outname = 'outputspiketest1.pkl'
+    res.to_pickle(pklpath+outname)
     mass_flux = bc.mass_flux(res,numc) #Run to get mass flux
     mbal = bc.mass_balance(res,numc,mass_flux)
     Couts = bc.conc_out(numc,timeseries,chemsumm,res,mass_flux)

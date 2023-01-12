@@ -442,15 +442,16 @@ class SubsurfaceSinks(FugModel):
                                 A = res.AsoilV
                             D_djk,D_mjk,Detjk,Zwk,Zk,Qetk = 'D_d'+str(j)+str(k),'D_m'+str(j)+str(k),'Det'+str(j)+str(k),\
                             'Zw_'+str(k),'Z'+str(k),'Qet'+str(k)
-                            fwatk, Vk = 'fwat'+str(k),'V' + str(k)
+                            fwatk, Vk, D_mkj, = 'fwat'+str(k),'V' + str(k),'D_m'+str(k)+str(j),
                             #Calculate D water subsoil from Paraiba (2002)
                             Lw = res.Zwater*res.Deff_water/y
                             Lss = res.loc[mask,Zk]*res.Deff_subsoil/y
                             res.loc[mask,D_djk] = A*Lw*Lss/(Lw+Lss)
-                            res.loc[mask,D_mjk] = params.val.wmim*res.loc[mask,fwatk]*res.loc[mask,Vk]*res.loc[mask,Zwk] #Mixing of mobile & immobile water
+                            res.loc[mask,D_mjk] = params.val.wmim*res.loc[mask,fwatk]*res.loc[mask,Vk]*res.loc[mask,'Zwater'] #Mixing of mobile & immobile water
+                            res.loc[mask,D_mkj] = params.val.wmim*res.loc[mask,fwatk]*res.loc[mask,Vk]*res.loc[mask,Zwk] #Mixing of mobile & immobile water
                             res.loc[mask,Detjk] = res.loc[mask,Qetk]*res.loc[mask,Zwk] #ET flow goes through subsoil first - may need to change
                             res.loc[mask,D_jk] = res.loc[mask,D_djk] + res.loc[mask,Detjk] + res.loc[mask,D_mjk]
-                            res.loc[mask,D_kj] = res.loc[mask,D_djk]+ res.loc[mask,D_mjk]/params.val.immobmobfac
+                            res.loc[mask,D_kj] = res.loc[mask,D_djk]+ res.loc[mask,D_mkj]/params.val.immobmobfac
                         #If there is a ponding zone, then the activity at the upstream boundary condition is the activity in the pond.
                         #We will have to make this explicit at the beginning of the ADRE
                         elif k in ['pond']:
@@ -1170,7 +1171,8 @@ class SubsurfaceSinks(FugModel):
             Couts.loc[:,'Qout_meas'] = timeseries.loc[:,'Qout_meas']
             Couts.loc[:,'Qout'] = np.array(res_time.loc[(min(res_time.index.levels[0]),slice(None),numx-1),'Qout'])
         except KeyError:
-            Couts.loc[:,'Qout'] = timeseries.loc[:,'Qout']
+            pass
+            #Couts.loc[:,'Qout'] = timeseries.loc[:,'Qout']
         for chem in mass_flux.index.levels[0]:
             try: #If there are measurements
                 Couts.loc[:,chem+'_Coutmeas'] = timeseries.loc[:,chem+'_Coutmeas']

@@ -1250,6 +1250,9 @@ class BCBlues(SubsurfaceSinks):
     
     def modify_timestep(self,timeseries,indfactor):
         #pdb.set_trace()
+        if indfactor == 1:
+            timeseries = timeseries.copy(deep=True)
+            return timeseries
         chemsumm = self.chemsumm
         negtimeseries = timeseries.loc[timeseries.time<0,:].copy()
         timeseries = timeseries.loc[timeseries.time>=0,:].copy()
