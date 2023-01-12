@@ -37,6 +37,9 @@ params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
+Cin = 1000 #ng/L
+Cin = Cin*1e-6 #Convert to g/m³
+timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
 #timeseries = pd.read_excel('inputfiles/timeseries_wateryear.xlsx')
 #Run only for the first event

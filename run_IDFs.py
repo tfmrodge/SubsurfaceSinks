@@ -32,13 +32,13 @@ locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
 chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
 
 #Design Tests
 def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
-    params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+    params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -184,8 +184,8 @@ scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asy
 #combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0))
 #combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
-#combos = list(itertools.product([0,1],repeat=6))
-combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0),(0,0,0,1,0,0),)
+combos = list(itertools.product([0,1],repeat=6))
+#combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0),(0,0,0,1,0,0),)
 #pdb.set_trace()
 for combo in combos:
     scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
