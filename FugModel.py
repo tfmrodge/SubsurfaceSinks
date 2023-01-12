@@ -515,8 +515,12 @@ class FugModel(metaclass=ABCMeta):
                 *dt*res.loc[(slice(None),slice(None),res.dm0),'Z1'] - np.array(M_us)
         
             #M_t =  res.bc_us[mask]*params.val.Qin*np.array(res.Z1[slice(None),0])*np.array((dt-delf_test1.shift(1)[mask]))
-            res.loc[mask,'M_star'] = np.array(res[mask].M_xf + np.array(M_t))
-            res.loc[mask,'inp_mass1'] = np.array(M_t) #Mass (moles) from outside system to the water compartment)
+            try:
+                res.loc[mask,'M_star'] = np.array(res[mask].M_xf + np.array(M_t))
+                res.loc[mask,'inp_mass1'] = np.array(M_t) #Mass (moles) from outside system to the water compartment)
+            except ValueError:
+                pdb.set_trace()
+                xxx = 'whatup'
         #Case 3 - too close to origin for cubic interpolation, so we will use linear interpolation
         #Not always going to occur
         mask = (np.isnan(res.M_star)) & (~np.isnan(res.Pe)) #Peclet check excludes drain cell
