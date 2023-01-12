@@ -618,6 +618,12 @@ class BCBlues(SubsurfaceSinks):
             else:#Here we use the saturation value at the last time step, not the actual one. This should keep at hygroscopic point.
                 Q6_inf_us = 1/dt*((Sss-params.val.Sh)*res.Porosity[compartments[0]]*res.V[compartments[0]])+(Qin_f+Qcap)
             Qinf_f = max(min(Q6_infp,Q6_inf_us),0)
+            #TR 20230110 - restricting capillary flow to ensure flow is always down into drainzone (no net backflow)
+            while Qcap > Qinf_f:
+                Qcap = Qinf_f
+                Q6_inf_us = 1/dt*((Sss-params.val.Sh)*res.Porosity[compartments[0]]*res.V[compartments[0]])+(Qin_f+Qcap)
+                Qinf_f = max(min(Q6_infp,Q6_inf_us),0)
+                
             #Native soil unconnected to plants - no ET. 
             if compartments[0] == 'native_soil':
                 Qet_f = 0
