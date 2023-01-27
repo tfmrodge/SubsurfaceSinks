@@ -451,22 +451,29 @@ class FugModel(metaclass=ABCMeta):
             inp_soil = 'inp_' +str(numc.index('subsoil')+1)
             res.loc[:,inp_soil] = 0
             res.loc[res.dm0,inp_soil] = res.loc[res.dm0,'Mqin']/dt
+            #20230117 - Recalculate explicit pond overflow using pondastar.
+            if res.loc[res.ndm,'Dadvpond'].sum()>0:
+                #Mass out
+                res.loc[res.ndm,'Mover_p'] = pondastar*res.loc[res.ndm,'Dadvpond']*dt
+                res.loc[res.ndm,'Dadvpond'] = 0.#Mover_p/pondastar/dt
+            else:
+                res.loc[res.ndm,'Mover_p'] = 0.
             #Next, we resolve this time step by making it part of the RHS for the pond cell.
             if res.Vpond[-1] == 0: #There may be a small rounding error there, so we will fix it here.
                 #res.loc[res.ndm,inp_val] = 0 #Just add the rounding error to Min to keep it conservative
-                if Min.sum() != 0: #Just in case, only do this correction if there is actually and Min
+                if Min.sum() != 0: #Just in case, only do this correction if there is actually an Min
                     res.loc[res.dm0,'Min_p'] += np.array(pondastar*res.loc[res.ndm,'Zpond']*(res.Vpond[-1]+res.Qin[-1]*dt)\
-                                            -np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p']))
+                            -np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p'])-np.array(res.loc[res.ndm,'Mover_p']))
                 else:
                     res.loc[res.ndm,ponda_t] = 0 #All mass leaves pond advectively if the volume is zero.
             else:#If there is a ponding zone, the extra mass will stay in the pond. Need to account for this
                 #res.loc[res.ndm,inp_val] = np.array(Min-res.loc[res.dm0,'Mqin']-res.loc[res.dm0,'Min_p'])/dt
                 res.loc[res.ndm,ponda_t] = (pondastar*res.loc[res.ndm,'Zpond']*np.array(res.Vpond[-1] + res.Qin[-1]*dt)\
-                                           - np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p']))\
+                            -np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p'])-np.array(res.loc[res.ndm,'Mover_p']))\
                                            /res.loc[res.ndm,'Zpond']/np.array(res.Vpond[-1])
                 #Check for a very small rounding error, ignore if present.
                 err = (pondastar*res.loc[res.ndm,'Zpond']*np.array(res.Vpond[-1] + res.Qin[-1]*dt))\
-                    - np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p']) \
+                    - np.array(res.loc[res.dm0,'Mqin']+res.loc[res.dm0,'Min_p'])-np.array(res.loc[res.ndm,'Mover_p'])\
                     - (res.loc[res.ndm,ponda_t]*res.loc[res.ndm,'Zpond']*np.array(res.Vpond[-1]))
                 relerr = err/(pondastar*res.loc[res.ndm,'Zpond']*np.array(res.Vpond[-1] + res.Qin[-1]*dt))
                 if (np.sum(res.loc[res.ndm,ponda_t]<0)>0) & (np.sum(relerr<1/1000000)!=0):
@@ -732,11 +739,16 @@ class FugModel(metaclass=ABCMeta):
             if j != 0:#Skip water compartment
                 #pdb.set_trace
                 res.loc[(slice(None),slice(None),slice(None)),inp_mass] = dt*res.loc[:,inp_val]
+            elif j == 'pond':
+                #res.loc[res.ndm,'Mover_p'] = pondastar*res.loc[res.ndm,'Dadvpond']*dt
+                #We are going to set the Dadv to the mass flux - should be OK
+                res.loc[res.ndm,'Dadvpond'] = res.Mover_p/res.loc[res.ndm,a_val]/dt               
             if sum(res.loc[:,a_val]<0) >0: #If solution gives negative values flag it
                 pdb.set_trace()
                 #xxx = 'poop'
-                #On error, set all a values to zero.
+                #On error, exit.
                 sys.exit('Negative activity error at '+str(res.time[0]))
+            
         #xxx = 1
         #'''
         

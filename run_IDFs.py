@@ -32,13 +32,15 @@ locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
 chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+#params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
 #Design Tests
 def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
-    params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+    params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+    params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -51,7 +53,7 @@ def design_tests(scenario_dict):
     
     #Change infiltration rate in system (Kinf)
     if scenario_dict['Kinf'] == True: 
-        Kffactor = 0.5
+        Kffactor = 2.0
         params.loc['Kf','val'] = Kffactor*params.val.Kf
     #Changedepth of system (Dsys)
     if scenario_dict['Dsys'] == True:     
@@ -84,6 +86,12 @@ def design_tests(scenario_dict):
         params.loc['BC_Depth_Curve','val'] = np.array2string(Ds,separator=",")[1:-1]
         params.loc['BC_Area_curve','val'] = np.array2string(As,separator=",")[1:-1]
         params.loc['BC_Volume_Curve','val'] = np.array2string(Vs,separator=",")[1:-1]
+    
+    #Raise underdrain invert to halfway up - not accounting for pipe diameter
+    if scenario_dict['hpipe'] == True:  
+        params.loc['hpipe','val'] = 0.1 #10cm, half of drain depth
+    #else: params.loc['fvalveopen','val'] = None
+    
     return locsumm, params
 
 
@@ -146,18 +154,19 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     res.loc[:,'pct_Qover'] = np.array(model_outs.loc[(slice(None),slice(None),numx),'advpond'].sum())\
                                       /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'].sum())
     #Mean Effluent Concentration (ng/L)
-    res.loc[:,'MEC_ngl'] = 1e6*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1).groupby(level=[0,1]).sum())\
-                                    /np.array(Q_stormsewer)).groupby(level=0).mean()*chemsumm.loc[:,'MolMass']
+    #res.loc[:,'MEC_ngl'] = 1e6*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1).groupby(level=[0,1]).sum())\
+    #                                /np.array(Q_stormsewer)).groupby(level=0).mean()*chemsumm.loc[:,'MolMass']
+    res.loc[:,'MEC_ngl'] = 1e6*((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1).groupby(level=[0]).sum())\
+                                    /np.array(Q_stormsewer.sum()))*chemsumm.loc[:,'MolMass']
     res.loc[:,'MEC_ngl'] = res.loc[:,'MEC_ngl'].fillna(0)
     #Calculate concentration reduction as the average effluent concentration divided by the 
     res.loc[:,'Conc_red'] = 1- res.MEC_ngl/Cin*1e-6
     #Calculate the time-integrated risk quotient = sum((concentration/reference concentration)*dt)/sum(dt)
     ref_conc = 95/298.400 #nmol/L, Coho Salmon LC50 for 6PPD-Q
-    res.loc[:,'RQ_av'] = (1e6*(((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1)*mass_flux.dt).groupby(level=[0,1]).sum())\
-                      /np.array(Q_stormsewer))/ref_conc).groupby(level=0).sum()/mass_flux.dt.groupby(level=[0,1]).mean().groupby(level=0).sum()
+    res.loc[:,'RQ_av'] = res.loc[:,'MEC_ngl']/95.0
     res.loc[:,'RQ_sum'] = (1e6*(((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1)).groupby(level=[0,1]).sum())\
                       /np.array(Q_stormsewer))/ref_conc).groupby(level=0).sum()  
-    #Now, we will calculate the flow rate of a receiving body that would be required to keep the risk low
+    #Now, we will calculate the flow rate of a receiving bo♣dy that would be required to keep the risk low
     #For a "high" risk LOC > 0.5
     #res.loc[:,'QLOC_05'] = 2*1e6*mass_flux.dt.groupby(level=[0,1]).mean().groupby(level=0).sum()/(ref_conc)\
     #    *((((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1)*mass_flux.dt).groupby(level=[0,1]).sum())).groupby(level=0).sum())
@@ -175,7 +184,8 @@ for duration in durations:
         dur_freqs.append([str(duration),str(freq)])#[ind,:] = [str(duration),str(freq)]
         #ind += 1
 #Set up loop through scenarios
-scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
+                 'Asys':False, 'Hp':False, 'hpipe':False}
 #import pdb
 #params = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
 #list(itertools.combinations(params,6))
@@ -184,26 +194,34 @@ scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asy
 #combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0))
 #combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
-#combos = list(itertools.product([0,1],repeat=6))
-combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0),(0,0,0,1,0,0),)
+combos = list(itertools.product([0,1],repeat=7))
+#combos = ((0,0,0,0,0,0,0),(1,0,0,0,0,0,0),(0,1,0,0,0,0,0),(0,0,1,0,0,0,0),(0,0,0,1,0,0,0),(0,0,0,0,1,0,0),(0,0,0,0,0,1,0),(0,0,0,0,0,0,1))
+#          (1,1,0,0,1,1),(1,1,0,0,0,1))
+#combos = ((0,0,0,0,0,1,0),)#(0,0,0,0,0,0,0))#,(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
 #pdb.set_trace()
 for combo in combos:
-    scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+    scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
+                     'Asys':False, 'Hp':False, 'hpipe':False}
     for ind, param in enumerate(scenario_dict):        
         scenario_dict[param] = bool(combo[ind])
     outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
     filtered = [k for k,v in scenario_dict.items() if v == True]
-    outname = 'IDF_'+'_'.join(filtered)+'.pkl'
-    #if outname in os.listdir(outpath):
-    #    continue #Skip if already done
+    outname = 'IDF_lowkn'+'_'.join(filtered)+'.pkl'
+    #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
+    if outname in os.listdir(outpath):
+        continue #Skip if already done
+    if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
+        continue #Mutually exclusive
+    #if (scenario_dict['fvalve'] != True):
+    #    continue
 #for scenario in scenario_dict:
     #scenario_dict[scenario] = True
     locsumm_test, params_test = design_tests(scenario_dict)
     #pdb.set_trace()
     #chemsumm = chemsumm.loc['6PPDQ']
-    #for dur_freq in dur_freqs:
-        #dur_freq = dur_freqs[10]
-    #    res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+    # for dur_freq in dur_freqs:
+    #     dur_freq = dur_freqs[2]
+    #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
     res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
     #codetime = time.time()-tstart
     res = pd.concat(res)
