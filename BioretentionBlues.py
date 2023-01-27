@@ -493,8 +493,10 @@ class BCBlues(SubsurfaceSinks):
             Qr_in = res.Area.air*rainrate/1E3 #m³/hr
             #Infiltration Kf is in m/hr
             #Potential
-            Qinf_poss = params.val.Kf * (res.Depth.pond + res.Depth[compartments[1]])\
-            /res.Depth[compartments[1]]*res.Area[compartments[0]]
+            #20220118 - set datum to bottom of pond rather than bottom of filter to remove
+            #dependency on filter depth for pond to filter infiltration - 
+            #assume linear increase with ponding depth as before, this time not normalized to depth of system. 
+            Qinf_poss = params.val.Kf * (1+res.Depth.pond)*res.Area[compartments[0]]
             #Upstream max flow (from volume)
             Qinf_us = 1/dt*(res.V.pond)+(Qr_in+inflow)
             #Downstream capacity
@@ -1265,9 +1267,11 @@ class BCBlues(SubsurfaceSinks):
         timeseries.reset_index(inplace=True,drop=True)
         newind = pd.RangeIndex(0,max(timeseries.index)*indfactor+1,step=1)
         nts = pd.DataFrame(index=newind,columns =timeseries.columns)
+        #20230118 - updated to switch all ints to floats
         nt_dtypes = timeseries.dtypes.to_dict()
-        nt_dtypes['RainRate'] = np.dtype('float64')
-        nt_dtypes['6PPD_Min'] = np.dtype('float64')
+        for nt_dtype in nt_dtypes:
+            if nt_dtypes[nt_dtype] == np.dtype('int64'):
+                nt_dtypes[nt_dtype] = np.dtype('float64')
         nts = nts.astype(nt_dtypes)
         ind = 0
         while ind < len(nts.index):

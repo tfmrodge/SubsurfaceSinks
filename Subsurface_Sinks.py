@@ -985,7 +985,9 @@ class SubsurfaceSinks(FugModel):
             elif j in ['rootbody','rootxylem','rootcyl','shoots']:
                 #Growth dilution processes - in DT but nowhere else.
                 Nrg_j,D_rgj = "Ng_"+str(j),"D_g"+str(j)
-                mass_flux.loc[:,Nrg_j] = (res_time.loc[:,D_rgj] * res_time.loc[:,a_val])            
+                mass_flux.loc[:,Nrg_j] = (res_time.loc[:,D_rgj] * res_time.loc[:,a_val])    
+            #elif j == 'pond':
+            #    mass_flux.loc[:,Nadvj] = res_time.loc[:,'Mover_p']/res_time.dt
             for kind, k in enumerate(numc):#From compartment j to compartment k
                 if j != k:
                     kind = kind+1

@@ -4,6 +4,97 @@ Created on Fri Oct  7 11:53:19 2022
 
 @author: trodge01
 """
+import os
+import itertools
+import pdb
+import pandas as pd
+import numpy as np
+import seaborn as sns
+from BioretentionBlues import BCBlues
+#Plot system performance on IDF curves. This plots the change from bnase case values. 
+#Inputs
+inpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+#outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDF_results.pkl'
+#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/IDF_nodrain.pkl'
+numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
+locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/params_Pine8th.xlsx',index_col = 0)
+timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx')
+#Load data
+defname = 'IDF_.pkl'
+defdata = pd.read_pickle(inpath+defname)
+#scenarios = ['fvalve', 'Foc', 'Kinf', 'Dsys', 'Asys', 'Hp']
+scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+#combos = ((1,0,0,0,1,0),(1,1,0,0,1,0)),(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1))
+combos = ((0,0,0,1,0,0),)#
+#for scenario in scenarios:
+#combos = list(itertools.product([0,1],repeat=6))
+#combos = combos[:38]
+for combo in combos:
+    pdb.set_trace()
+    scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
+    for ind, param in enumerate(scenario_dict):
+        #pdb.set_trace()
+        scenario_dict[param] = bool(combo[ind])
+    filtered = [k for k,v in scenario_dict.items() if v == True]
+    testname = 'IDF_'+'_'.join(filtered)+'.pkl'
+    #testname = 'IDF_defaults'
+    try:
+        pltdata = pd.read_pickle(inpath+testname)
+    except FileNotFoundError:
+        continue
+    #Define the x and y axes
+    xticks = [0.25,0.5,1,3, 6,12,24]
+    xticks = [np.log10(xticks),xticks]
+    yticks = [5,10,25,50,100]
+    yticks = [np.log10(yticks),yticks]
+    #Define the variables to plot
+    pltvars=['pct_stormsewer','LogD','LogI']
+    pltvars_delta = pltvars.copy()
+    delname = pltvars[0] +'_delta'
+    pltvars_delta[0] = delname
+    pltdata.loc[:,delname] = defdata.loc[:,pltvars[0]] - pltdata.loc[:,pltvars[0]]
+    pdb.set_trace()
+    #pltvars=['RQ_av','LogD','LogI']
+    #Determine the average risk quotients, sum as a % of the base-case, av as actual value
+    bcRQsum = defdata.RQ_sum.sum()
+    RQs = [pltdata.RQ_sum.sum()/bcRQsum,pltdata.RQ_av.mean()]
+    #Define other parameters
+    #Limit of interpolation - values outside of these limits will be set to these. Use "none" for no limits
+    hilim = np.round(2*max(pltdata.loc[:,delname]),decimals=1)
+    lolim = np.round(2*min(pltdata.loc[:,delname]),decimals=1)
+    interplims = [lolim,hilim]
+    #interplims = [0.,3.5]
+    vlims = [-0.4,0.4]
+    #vlims = [lolim,hilim]#[0.15,3.5]#
+    #pdb.set_trace()
+    #define the colormap - default is brown-blue
+    #cmap = None
+    #if lolim<0:
+    #    cmap = sns.diverging_palette(250, 30, l=40,s=80,center="light", as_cmap=True)
+    #else: 
+    #    cmap = sns.light_palette('#8f4e27', as_cmap=True)
+    cmap = sns.diverging_palette(250, 30, l=40,s=80,center="light", as_cmap=True)
+        #cmap = sns.light_palette("seagreen", as_cmap=True)
+    #cmap = sns.cubehelix_palette(start=.75, rot=-.5,light=0.85, as_cmap=True)
+    #cmap = sns.cubehelix_palette(n_colors = 7,start=1.40, rot=-0.9,gamma = 0.3, hue = 0.9, dark=0.1, light=.95,as_cmap=True,reverse=True)
+    bc = BCBlues(locsumm,chemsumm,params,timeseries,numc) 
+    fig,ax = bc.plot_idfs(pltdata,pltvars=pltvars_delta,cmap=cmap,vlims=vlims,interplims=interplims,
+                          xticks=xticks,yticks=yticks,figsize=(6,4))
+    ax.set_xlabel('Event Duration (hrs)')
+    ax.set_ylabel('Intensity (mm/hr)')
+    #figname = 'IDF_delta_'+str(scenario)
+    figname = 'IDF_'+'_'.join(filtered)
+    ax.set_title(figname)
+    #Annotate the risk quotients
+    ax.annotate('ΣRQ='+f'{RQs[0]:.0%}',xy= (np.log10(0.2),np.log10(5)),color = 'k')
+    ax.annotate('RQav='+f'{RQs[1]:.2f}',xy= (np.log10(0.2),np.log10(4)),color = 'k')           
+    figpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Manuscript/Figs/Pythonfigs/'
+    #
+    #fig.savefig(figpath+figname+'.pdf',format='pdf')
+    #fig.savefig()
+'''
 import pandas as pd
 import numpy as np
 import pdb
@@ -43,7 +134,7 @@ fig,ax = bc.plot_idfs(pltdata,xticks=xticks,yticks=yticks,pltvals=True,pltvars=p
 #ax.set_xticks(xticks[0])
 #ax.setxticklabels(xticks[1])
 #ax.set_yticks(yticks[0],labels=yticks[1])
-
+'''
 '''
 #cmap = sns.cubehelix_palette(n_colors = 7,start=1.40, rot=-0.9,gamma = 0.3, hue = 0.9, dark=0.1, light=.95,as_cmap=True,reverse=True)
 #For mass removal (soil vs water)
