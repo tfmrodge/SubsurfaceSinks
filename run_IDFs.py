@@ -175,17 +175,38 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #       -np.array(Q_stormsewer)*ldt[0]).groupby(level=0).sum()
     return res
 
+def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
+    #First, we will define the timeseries based on the duration. Probably better to put this i/o step out of the loop but w/e
+    #timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
+    #Test if no underdrain - has to be after timeseries is imported.
+    timeseries_test = timeseries.copy()
+    scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
+                     'Asys':False, 'Hp':False, 'hpipe':False}
+    for ind, param in enumerate(scenario_dict):        
+        scenario_dict[param] = bool(combo[ind])
+    locsumm_test, params_test = design_tests(scenario_dict)
+    if params.loc['fvalveopen','val'] != None:
+        timeseries_test.loc[timeseries.time>0,'fvalveopen'] = params_test.loc['fvalveopen','val']
+    else:
+        timeseries_test.loc[timeseries.time>0,'fvalveopen'] = 0.8
+        
+    #try:     
+    #except NameError:
+    #    pass
+    #Define the Qin and rain rate based on the frequency
+    #timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
+    bc = BCBlues(locsumm_test,chemsumm,params_test,timeseries_test,numc)
+    #Next, run the model!
+    #flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
+    model_outs = bc.run_BC(locsumm_test,chemsumm,timeseries,numc,params_test,pp=None)
+    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    filtered = [k for k,v in scenario_dict.items() if v == True]
+    outname = 'wateryear_'+'_'.join(filtered)+'.pkl'
+    model_outs.to_pickle(outpath+outname)
+    return 
 
-numtrials = (len(durations)*len(frequencies))
-dur_freqs = []#np.zeros((numtrials, 2),dtype=str)
-#ind = 0
-for duration in durations:
-    for freq in frequencies:
-        dur_freqs.append([str(duration),str(freq)])#[ind,:] = [str(duration),str(freq)]
-        #ind += 1
-#Set up loop through scenarios
-scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
-                 'Asys':False, 'Hp':False, 'hpipe':False}
+
+
 #import pdb
 #params = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 'Asys':False, 'Hp':False}
 #list(itertools.combinations(params,6))
@@ -194,45 +215,66 @@ scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False,
 #combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0))
 #combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
-combos = list(itertools.product([0,1],repeat=7))
+#combos = list(itertools.product([0,1],repeat=7))
 #combos = ((0,0,0,0,0,0,0),(1,0,0,0,0,0,0),(0,1,0,0,0,0,0),(0,0,1,0,0,0,0),(0,0,0,1,0,0,0),(0,0,0,0,1,0,0),(0,0,0,0,0,1,0),(0,0,0,0,0,0,1))
 #          (1,1,0,0,1,1),(1,1,0,0,0,1))
-#combos = ((0,0,0,0,0,1,0),)#(0,0,0,0,0,0,0))#,(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
+combos = ((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,0,0,0,0,0,0))#,(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
 #pdb.set_trace()
-for combo in combos:
+runwateryear = True
+if runwateryear == True:
+    n_jobs = len(combos)
+    timeseries = pd.read_excel('inputfiles/timeseries_wateryear.xlsx')
+    for combo in combos:
+        run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo)
+    #Parallel(n_jobs=n_jobs)(delayed(run_wateryears)(locsumm,chemsumm,params,numc,timeseries,combo) for combo in combos)
+else:
+    numtrials = (len(durations)*len(frequencies))
+    dur_freqs = []#np.zeros((numtrials, 2),dtype=str)
+    #ind = 0
+    for duration in durations:
+        for freq in frequencies:
+            dur_freqs.append([str(duration),str(freq)])#[ind,:] = [str(duration),str(freq)]
+            #ind += 1
+    #Set up loop through scenarios
     scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
                      'Asys':False, 'Hp':False, 'hpipe':False}
-    for ind, param in enumerate(scenario_dict):        
-        scenario_dict[param] = bool(combo[ind])
-    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
-    filtered = [k for k,v in scenario_dict.items() if v == True]
-    outname = 'IDF_lowkn'+'_'.join(filtered)+'.pkl'
-    #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
-    if outname in os.listdir(outpath):
-        continue #Skip if already done
-    if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
-        continue #Mutually exclusive
-    #if (scenario_dict['fvalve'] != True):
-    #    continue
-#for scenario in scenario_dict:
-    #scenario_dict[scenario] = True
-    locsumm_test, params_test = design_tests(scenario_dict)
-    #pdb.set_trace()
-    #chemsumm = chemsumm.loc['6PPDQ']
-    # for dur_freq in dur_freqs:
-    #     dur_freq = dur_freqs[2]
-    #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
-    res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
-    #codetime = time.time()-tstart
-    res = pd.concat(res)
-    #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
-    res = res.loc['6PPDQ',:] 
-    res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
-    res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
-    res.loc[:,'Intensity'] = intensities
-    res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
-    #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-    
-    res.to_pickle(outpath+outname)
+    for combo in combos:
+        scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
+                         'Asys':False, 'Hp':False, 'hpipe':False}
+        for ind, param in enumerate(scenario_dict):        
+            scenario_dict[param] = bool(combo[ind])
+            
+        
+            
+        outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+        filtered = [k for k,v in scenario_dict.items() if v == True]
+        outname = 'IDF_lowkn'+'_'.join(filtered)+'.pkl'
+        #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
+        if outname in os.listdir(outpath):
+            continue #Skip if already done
+        if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
+            continue #Mutually exclusive
+        #if (scenario_dict['fvalve'] != True):
+        #    continue
+    #for scenario in scenario_dict:
+        #scenario_dict[scenario] = True
+        locsumm_test, params_test = design_tests(scenario_dict)
+        #pdb.set_trace()
+        #chemsumm = chemsumm.loc['6PPDQ']
+        # for dur_freq in dur_freqs:
+        #     dur_freq = dur_freqs[2]
+        #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
+        #codetime = time.time()-tstart
+        res = pd.concat(res)
+        #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
+        res = res.loc['6PPDQ',:] 
+        res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
+        res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
+        res.loc[:,'Intensity'] = intensities
+        res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
+        #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
+        
+        res.to_pickle(outpath+outname)
     #scenario_dict[scenario] = False
 #'''

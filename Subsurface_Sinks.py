@@ -1018,7 +1018,7 @@ class SubsurfaceSinks(FugModel):
         mbal = pd.DataFrame(index = (mass_flux.N_effluent).groupby(level=[0,1]).sum().index)
         #First, add the things that are always going to be there.
         mbal.loc[:,'time'] = np.array(res_time.loc[(slice(None),slice(None),slice(0)),'time'])
-        mbal.loc[:,'Min'] = res_time.Min.groupby(level=[0,1]).sum().groupby(level=0).cumsum()
+        mbal.loc[:,'Min'] = res_time.Min.groupby(level=[0,1]).sum().groupby(level=0).cumsum()#I think this is in moles?
         mbal.loc[:,'Mtot'] = res_time.M_tot.groupby(level=[0,1]).sum()
         if normalized == True:
             divisor = mbal.Min+mbal.loc[(slice(None),mbal.index.levels[1][0]),'Mtot'].reindex(mbal.index,method ='ffill')
@@ -1280,7 +1280,7 @@ class SubsurfaceSinks(FugModel):
                     mbal.loc['Mnetsubsoilpond'] = -mbal.loc['Mnetsubsoilpond'] 
                 if 'shoots' in numc:
                     mbal.loc['Mnetsubsoilshoots'] = -mbal.loc['Mnetsubsoilshoots']                 
-            elif j in ['pond']:#Add mass in - goes to pond zone, NOT normalized.
+            elif j in ['pond']:#Add mass in (mol) - goes to pond zone, NOT normalized. 
                 ax.annotate(f'{mbal.loc["Min"]:.2e}',xy = dM_locs['Min'],fontsize = fontsize, fontweight = 'bold',xycoords='axes fraction')
                 ax.annotate(f'{mbal.loc["Madvpond"]:.2e}',xy = dM_locs['Madvpond'],fontsize = fontsize, fontweight = 'bold',xycoords='axes fraction')
             elif j in ['air']:#Air has advection out the back end
