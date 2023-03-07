@@ -185,7 +185,7 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
     for ind, param in enumerate(scenario_dict):        
         scenario_dict[param] = bool(combo[ind])
     locsumm_test, params_test = design_tests(scenario_dict)
-    if params.loc['fvalveopen','val'] != None:
+    if params_test.loc['fvalveopen','val'] != None:
         timeseries_test.loc[timeseries.time>0,'fvalveopen'] = params_test.loc['fvalveopen','val']
     else:
         timeseries_test.loc[timeseries.time>0,'fvalveopen'] = 0.8
@@ -198,8 +198,8 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
     bc = BCBlues(locsumm_test,chemsumm,params_test,timeseries_test,numc)
     #Next, run the model!
     #flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
-    model_outs = bc.run_BC(locsumm_test,chemsumm,timeseries,numc,params_test,pp=None)
-    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    model_outs = bc.run_BC(locsumm_test,chemsumm,timeseries_test,numc,params_test,pp=None)
+    outpath = 'C:/Users/trodge01/Documents/BigPickles/'
     filtered = [k for k,v in scenario_dict.items() if v == True]
     outname = 'wateryear_'+'_'.join(filtered)+'.pkl'
     model_outs.to_pickle(outpath+outname)
@@ -218,7 +218,7 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
 #combos = list(itertools.product([0,1],repeat=7))
 #combos = ((0,0,0,0,0,0,0),(1,0,0,0,0,0,0),(0,1,0,0,0,0,0),(0,0,1,0,0,0,0),(0,0,0,1,0,0,0),(0,0,0,0,1,0,0),(0,0,0,0,0,1,0),(0,0,0,0,0,0,1))
 #          (1,1,0,0,1,1),(1,1,0,0,0,1))
-combos = ((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,0,0,0,0,0,0))#,(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
+combos = ((0,0,0,0,0,0,0),)#,((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
 #pdb.set_trace()
 runwateryear = True
 if runwateryear == True:
