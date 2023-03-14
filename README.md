@@ -2,14 +2,22 @@
 Subsurface Sinks model of contaminant transport in a vegetated treatment system. 
 
 ## Installing Required Packages
-The following Conda environment contains all required Python packages for running the model. This code has been tested on Windows 10 and 11, some packages may need to be changed for installation on Mac/Unix computers (you can manually install most packages). Installation is typically fairly rapid on a normal desktop computer.
+The following Conda environment contains all required Python packages for running the model. This code has been tested on Windows 10 and 11, some packages may need to be changed for installation on Mac/Unix computers (you can manually install most packages). Installation is typically fairly rapid on a normal desktop computer.  If this doesn't work, see "Method 2" below - this may have package incompatability issues but might work if the conda env fails
  <br>
+ ### Method 1
 Step 0 - Install Conda. An easy way to do this is by installing [Anaconda](https://www.anaconda.com/), which also contains many Python packages<br>
 Step 1 - Clone my github repository from https://github.com/tfmrodge/SubsurfaceSinks<br>
 Step 2 - Open a terminal (I use Anaconda Prompt), then navigate to the github repository and run <pre><code> conda env create -f bcenv.yml</code></pre><br>
 Step 3 (optional) - Run the command <pre><code> conda activate bcenv</code></pre><br>
 Step 4 - Run the command <pre><code> jupyter notebook</code></pre> to open the list of notebooks, and open the "Bioretention Blues Model Tutorial". You may need to change the kernel (under Kernel>Change Kernel>FugModelEnv) in the Jupyter toolbar, or if you are in the correct environment in your terminal it will bring open with that kernel<br>
-Step 5 - That's it! If you want to use the "run_IDFs.py" script, you will need to install the "JobLib" package as well (or run non-parallel). To do so, refer to the documentation for JobLib (this is a more advanced feature, contact me if you need help)
+### Method 2
+Step 0 - Install Conda. An easy way to do this is by installing [Anaconda](https://www.anaconda.com/), which also contains many Python packages<br>
+Step 1 - Clone my github repository from https://github.com/tfmrodge/SubsurfaceSinks<br>
+Step 2 - Open a terminal with Python (I use Anaconda Prompt), then run <pre><code> conda env create -n bcenv python=3.10 pandas joblib seaborn scipy</code></pre><br>
+Step 3 - Run the command <pre><code> conda activate bcenv</code></pre><br>
+Step 4 - Run the command <pre><code> pip install hydroeval</code></pre><br>
+Step 5 - Run the command <pre><code> jupyter notebook</code></pre> to open the list of notebooks, and open the "Bioretention Blues Model Tutorial". You may need to change the kernel (under Kernel>Change Kernel>FugModelEnv) in the Jupyter toolbar, or if you are in the correct environment in your terminal it will bring open with that kernel<br>
+Step 6 - That's it! Check out the tutorial and enjoy. Please let me know if you have problems
 
 The models are built as class objects. To get information on the class methods, read the code. If you have questions, or notice a bug, or want to say hello, please contact me (Tim Rodgers). My [Google Scholar Page](https://scholar.google.com/citations?user=npsj5x4AAAAJ&hl=en&oi=ao) should have my current email.
 
