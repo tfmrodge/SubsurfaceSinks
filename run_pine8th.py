@@ -65,9 +65,8 @@ else:
         pass
     
 #pdb.set_trace()
-calcflow = True#True#False# True# True#
+calcflow = True#True
 flowname = 'flowtest.pkl'
-#flowpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/flowtest_30s.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     mask = timeseries.time>=0
@@ -75,10 +74,6 @@ if calcflow is True:
     maxslice = np.max(np.where(mask))#minslice + 5 #
     flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
     flow_time.to_pickle(pklpath+flowname)
-    #bc.plot_flows(flow_time,Qmeas = flow_time.loc[(slice(None),'pond'),'Q_in'],compartments=['drain','water'],yvar='Q_todrain')
-    #Plot whole event
-    #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_todrain')
-    #Plot spike event
     try:
         bc.plot_flows(flow_time.loc[flow_time.time<6],Qmeas = timeseries.loc[timeseries.time<6,'Qout_meas'],
                       compartments=['drain','water'],yvar='Q_todrain')
@@ -87,7 +82,7 @@ if calcflow is True:
                       compartments=['drain','water'],yvar='Q_todrain')
         #% infiltrated - actual was ~78%
         inf_pct = 1 - (flow_time.loc[(slice(None),'drain'),'Q_todrain'].sum()/flow_time.loc[(slice(None),'pond'),'Q_in'].sum())
-        #timeseries.loc[:,'Q_drainout'] = np.array(flow_time.loc[(slice(None),'drain'),'Q_out'])
+        #Calculate KGE for the hydrology
         KGE_hydro = hydroeval.evaluator(kge, np.array(flow_time.loc[(slice(None),'drain'),'Q_todrain']),\
                               np.array(timeseries.loc[timeseries.time>=0,'Qout_meas']))
     except KeyError:
