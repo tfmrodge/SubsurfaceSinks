@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Oct 18 10:12:34 2022
+This script will run the model across intensity-duration-frequency curves (as specified in a timeseries file)
+or across a water year (timeseries_wateryear)
+It can be used to change the design of the system based on a combination of design features (as explained below)
 
 @author: trodge01
 """
@@ -27,19 +30,19 @@ tstart = time.time()
 #For the vancouver tree trench, no ponding zone. 
 #numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
-#locsumm = pd.read_excel('inputfiles/QuebecSt_TreeTrench.xlsx',index_col = 0)
-locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+#locsumm = pd.read_excel('inputfiles/Pine8th/QuebecSt_TreeTrench.xlsx',index_col = 0)
+locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/PPD_CHEMSUMM.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/Pine8th/params_Pine8th_1.xlsx',index_col = 0)
 #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
 #Design Tests
 def design_tests(scenario_dict):
     #Re-initialize
-    locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
-    params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+    locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
+    params = pd.read_excel('inputfiles/Pine8th/params_Pine8th_1.xlsx',index_col = 0)
     params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
@@ -114,7 +117,7 @@ frequencies = ['2yr','10yr','100yr','200yr']
 #Next, we will define the function that will run the model.
 def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #First, we will define the timeseries based on the duration. Probably better to put this i/o step out of the loop but w/e
-    timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
+    timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
     #Test if no underdrain - has to be after timeseries is imported.
     if params.loc['fvalveopen','val'] != None:
         timeseries.loc[timeseries.time>0,'fvalveopen'] = params.loc['fvalveopen','val']
@@ -177,7 +180,7 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
 
 def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
     #First, we will define the timeseries based on the duration. Probably better to put this i/o step out of the loop but w/e
-    #timeseries = pd.read_excel('inputfiles/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
+    #timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
     #Test if no underdrain - has to be after timeseries is imported.
     timeseries_test = timeseries.copy()
     scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
@@ -223,7 +226,7 @@ combos = ((0,0,0,0,0,0,0),)#,((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,1,0,0,0,0),(0,
 runwateryear = True
 if runwateryear == True:
     n_jobs = len(combos)
-    timeseries = pd.read_excel('inputfiles/timeseries_wateryear.xlsx')
+    timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_wateryear.xlsx')
     for combo in combos:
         run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo)
     #Parallel(n_jobs=n_jobs)(delayed(run_wateryears)(locsumm,chemsumm,params,numc,timeseries,combo) for combo in combos)

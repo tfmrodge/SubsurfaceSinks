@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Aug 19 12:54:29 2022
-Calibrate the Pine/8th System
+Calibrate the Pine/8th System. Use the cal_flows switch to state if you are 
+calibrating to flows or (if false) to effluent concentrations.
 @author: trodge01
 """
 
@@ -21,31 +22,28 @@ import hydroeval
 #Load parameterization files
 pdb.set_trace()
 #numc = ['water', 'subsoil', 'air', 'pond'] #
-codetime = time.time()
-#For the vancouver tree trench, no ponding zone. 
-#numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
+codetime = time.time() 
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
-#locsumm = pd.read_excel('inputfiles/QuebecSt_TreeTrench.xlsx',index_col = 0)
-locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
+locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
 #Only bromide
-#chemsumm = pd.read_excel('inputfiles/Br_CHEMSUMM.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/Br_CHEMSUMM.xlsx',index_col = 0)
 #Only rhodamine
-chemsumm = pd.read_excel('inputfiles/CHEMSUMM_rhodamine.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/CHEMSUMM_rhodamine.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
-timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
-timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
+timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_Pine8th.xlsx')
 
 #Run only for the first event
 timeseries = timeseries[timeseries.time<=6]
 
-#timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_simstorm.xlsx')
+
 #Import a flows if you want it
 #flowpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/flowtest.pkl'
 #flow_time = pd.read_pickle(flowpath)
 #Instantiate the model
 bc =  BCBlues(locsumm,chemsumm,params,timeseries,numc)
+#Set this where you want your pickles going
 pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 timedfname = 'mod_timeseries.pkl'
 #How much should we modify the time-step. Multiply the index by this number. 
@@ -62,10 +60,14 @@ else:
 cal_flows = False
 #For flows:
 if cal_flows == True:
+    #Specify the parameters you want to calibrate and the initial guesses
     paramnames = ['Kf','Kn','native_depth']
     param0s = [0.2, 0.1, 0.15]
     cal = bc.calibrate_flows(timeseries,paramnames,param0s)
-else:
+else:#Calibrate based on effluent concentration
+    #Specify the parameters you want to calibrate, the initial guesses and the bounds for each parameter.
+    #The "objective" input can be used to change the objective (if you want to targe recovery not KGE)
+    #For more details, see the associated method.
     paramnames = ['AF_soil','immobmobfac']
     param0s = [1.00000000e+02, 1.39966944e-04]
     bnds = ((1e-6,1000.),(1e-6,100.))
@@ -90,42 +92,3 @@ else:
     cal = bc.calibrate_tracer(timeseries,paramnames,param0s,bounds = bnds,
                               tolerance = tol,flows=None,objective=objective)
     
-'''
-Results - 20221208
-    
-Bromide - ['alpha','thetam','wmim']
-#0.16698067838138309 [0.63210325, 0.12847097, 0.01205933]
-
-#0.20966412904029164 [0.64275021 0.22164346 0.01335949]
-
-#0.09343429760266042 [10.          0.16624547  0.67639097]
-
-0.16815718606473196 [10.00001356  0.19579588  0.67638875]
-
-***FINAL***
-20230123 - 0.16815718606473196 [10.00001356  0.19579588  0.67638875]
-
-rhodamine - ['AF_soil','immobmobfac']
-0.36210255801782476 [1.00000000e+02 1.39966944e-04]
-Bromide - ['alpha','thetam','wmim']
-0.09343429760266042 [10.          0.16624547  0.67639097]
-
-0.16813840694593984 [10.00001154  0.19532011  0.676389  ]
-0.3199277163435772 [1.00000000e+02 2.89863953e-04]
-***FINAL***
-20230123 - 0.3191173282975668 [1.00000000e+02, 2.81524367e-04]
-
-Rhodamine - AF_soil
-0.4520882813731859 [71.55216748]
-
-Results - 20230106   
-Flows -  ['Kf','Kn','native_depth']
-    obj - 0.04305055342910935, params = [0.19768124, 0.11874428, 0.19605502] (6 hrs)
-    obj - 0.0459369, params = [0.19768124, 0.125, 0.19605502] (whole time period)
-*** FINAL ***
-20230120
- obj -  0.04599777026422103 [0.20955119, 0.11786957, 0.1652281 ]
-    
-    
-
-'''

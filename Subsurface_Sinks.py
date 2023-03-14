@@ -1192,7 +1192,7 @@ class SubsurfaceSinks(FugModel):
     def concentrations(self,numc,res_time):
         """This method calculates modeled concentrations within the system.
         
-        attributes:
+        Attributes:
             numc (Str): list of names of compartments
             res_time (dataframe) - output from self.run_it
         """

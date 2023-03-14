@@ -837,7 +837,7 @@ class BCBlues(SubsurfaceSinks):
         #dt = timeseries.time[1]-timeseries.time[0] #Set this so it works
         res = locsumm.copy(deep=True)
         ntimes = len(timeseries['time'])
-        #Set up 4D output dataframe by adding time as the third multi-index
+        #Set up output dataframe by adding time as the third multi-index
         #Index level 0 = time, level 1 = chems, level 2 = cell number
         times = timeseries.index
         res_t = dict.fromkeys(times,[]) 
@@ -989,38 +989,26 @@ class BCBlues(SubsurfaceSinks):
         return model_outs
     
     
-    def plot_flows(self,flow_time,Qmeas=None,compartments=['water','drain'],yvar ='Q_exf',**kwargs):
+    def plot_flows(self,flow_time,Qmeas=None,compartments=['water','drain'],yvar ='Q_todrain',**kwargs):
+        ''' This method plots flows, as specified by "flow_time" (output of the flow_time method) dataframe. 
+        The user can choose the compartments, if they want to plot measured data, and what the y variable is.
+
+        Attributes:
+        -----------        
+        flow_time (df) - output of the flow_time method, hydrology of the sytem
+        Qmeas (df, optional) - Series, measured outflows if present. Needs same time index as flow_time
+        compartments (list, optional) - list of compartments to plot. Default is water and drain
+        yvar (str) - what is the variable to be plotted. Default is Q_todrain (pipe flow from drainage)
+        **kwargs - additional arguments defining plotting parameters. Right now, only ylim/xlim implemented
+        '''
         
         #pdb.set_trace()
-        #yvar = 'Q_out'
-        #for comp in compartments:
-            
-        #comp1 = 'water'
-        #comp2 = 'drain'
-        #comp3 = 'pond'
-        #shiftdist = 0
         mask = flow_time.time>=0
-        #pltdata = flow_time.loc[(mask,compartments),:]
-
-        #pltdata = flow_time.loc[(slice(210,timeseries.index[-1]),comp2),:] #To plot 
-        #pltdata2 = flow_time.loc[(slice(210,timeseries.index[-1]),comp3),:]
-        #res_time.loc[(plttime,slice(None),slice(None)),slice(None)] #Just at plttime
-        #ylim = ylim #[0, 4]
-        #xlim = [0,48]
         ylabel = 'Flow Rate (m³/h)'
         xlabel = 'Time'
-        #pltdata = res_time #All times at once
         fig,ax = plt.subplots(1,1,figsize=(14,8),dpi=300)
-        #fig = plt.figure(figsize=(14,8))
-        #ax = sns.lineplot(x = pltdata.index.get_level_values(0),hue = pltdata.index.get_level_values(1),y=yvar,data = pltdata)
-        #ax = sns.lineplot(data = pltdata,x = 'time',hue = pltdata.index.get_level_values(1),y=yvar)
-        #ax = plt.plot()
         for comp in compartments:            
-            #mask = flow_time.time>=0
             ax.plot(flow_time.loc[(mask.copy(),comp),'time'],flow_time.loc[(mask.copy(),comp),yvar])
-        #ax2 = sns.lineplot(x = pltdata2.loc[(slice(None),'pond'),'time'],hue = pltdata2.index.get_level_values(1),y='Depth',data = pltdata2)
-        #ax2.set_xlim(xlim)
-        #ax.set_ylim(ylim)#KGE
         if Qmeas is None:
             pass#labels = compartments
         else:
@@ -1028,22 +1016,13 @@ class BCBlues(SubsurfaceSinks):
             startind = len(Qmeas)- len(flow_time.loc[(mask,compartments[0]),'time'])
             ax.plot(flow_time.loc[(mask,compartments[0]),'time'],Qmeas[startind:],'#808080',zorder = 1) 
             compartments.append('Qmeas')
-            #Calculate KGE
-            
-            #labels = [compartments,'Qmeas']
-            #ax.legend(labels = [compartments,'Qmeas'])
-            #leg = ax.get_legend_handles_labels()
-            #leg[0].append(art[0])
-            #leg[1].append('Qmeas')
-            #ax.get_legend().remove()
-            #leg = [*leg,[art,'Qmeas']]
         #Probably a better way to add these, but this should work for now
         for key, value in kwargs.items():
             if key == 'ylim':
                 ax.set_ylim(value)
             elif key == 'xlim':
                 ax.set_xlim(value)
-                
+        #Finally, label axes etc and return fig
         ax.legend(labels=compartments)            
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -1051,9 +1030,17 @@ class BCBlues(SubsurfaceSinks):
         ax.tick_params(axis='both', which='major', labelsize=15)  
         return fig
 
-    def plot_Couts(self,res,Couts=None,Cmeas=None,compounds=None,multfactor = 1):
+    def plot_Couts(self,res,Couts,Cmeas=None,compounds=None,multfactor = 1):
         '''
-        Cmeas should be a dataframe with timeseries measurements
+        Plot effluent concentrations from the system.
+
+        Attributes:
+        ----------- 
+        res (df) - results dataframe from running the whole model
+        Couts (df) - Results of the conc_out method (in the subsurface_sinks model). These will be plotted
+        Cmeas (df,optional) - Timeseries measurements for the measured effluent concentration
+        compounds (list, optional) - List of compounds to be plotted. Default "None" will plot the first compound only
+        multfactor(int, optional) - factor to multiply the effluent concentration by. Results are displayed as mg/L * multfactor
         '''
         #pdb.set_trace()
         ylabel = 'Effluent Concentration (mg/L)'
@@ -1062,6 +1049,7 @@ class BCBlues(SubsurfaceSinks):
         pltnames = []
         pltnames.append('time')
         numchems = 0
+        #Define compounds to be plotted
         if compounds == None:
             for chem in res.index.levels[0].values:
                 pltnames.append(chem+'_Coutest') 
@@ -1070,20 +1058,18 @@ class BCBlues(SubsurfaceSinks):
             for chem in compounds:
                 pltnames.append(chem+'_Coutest')  
                 numchems+=1
-            #pltnames = pltnames.append()
         pltdata = Couts[pltnames]
-        #if Cmeas == None:
-        #    pass
-        #else:
-        #   for col in Cmeas.columns:
-        #        pltdata.loc[:,str(col)] = Cmeas[col]
-                
-        #pltdata = pltdata.melt('time',var_name = 'Test_vs_est',value_name = 'Cout (mg/L)')
+        #Add measured if desired
+        if Cmeas == None:
+            pass
+        else:
+           for col in Cmeas.columns:
+                pltdata.loc[:,str(col)] = Cmeas[col]
         #Set up plot
         ylim = [0, 1000]
         ylabel = 'Cout (mg/L)'
         xlabel = 'Time'
-        #pltdata = res_time #All times at once
+        #Go through and plot
         fig,axs = plt.subplots(int(np.ceil(numchems/3)),3,figsize=(15,8),dpi=300)
         for ind,ax in enumerate(axs.reshape(-1)): 
             try:
@@ -1092,9 +1078,9 @@ class BCBlues(SubsurfaceSinks):
                 ax.set_ylim(ylim)
             except IndexError:
                 pass
-        #ax[0].set_ylim(ylim)
-        #ax.set_ylabel(ylabel, fontsize=20)
-        #ax.set_xlabel(xlabel, fontsize=20)
+        #Label
+        ax.set_ylabel(ylabel, fontsize=20)
+        ax.set_xlabel(xlabel, fontsize=20)
         ax.tick_params(axis='both', which='major', labelsize=15)
         fig.suptitle('Cout (mg/L x'+str(multfactor)+')');
         fpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Manuscript/Figs/Pythonfigs'
@@ -1105,9 +1091,14 @@ class BCBlues(SubsurfaceSinks):
         '''
         Calibrate flows based on measured effluent in the "timeseries"
         file and a test parameter name (string) and initial value (param0)
+        
+        Attributes:
+        -----------        
+        timeseries (df) - Input timeseries
+        paramnames (list of str) - parameters to be tuned
+        param0s (list of float) - initial values for the parameters
+        bounds (list of tuples) - Bounds for the parameters. 
         '''
-        #numc = self.numc
-        #pdb.set_trace()
         #Define the optimization function
         def optBC_flow(param,paramname):
             #No negative test values
@@ -1131,10 +1122,7 @@ class BCBlues(SubsurfaceSinks):
                 obj = (1-eff[0])[0]
             return obj
         
-        
-        #ins = [param0]
-        #bnds = ((0.0,1.0),(0.0,1.0),(0.0,1.0))
-        #bnds = ((0.0,1.0),(0.0,1.0))#,(0.0,1.0))
+        #Choose solver. L-BFGS-B works pretty well, might need to change things to change the solver.
         res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bounds,method='L-BFGS-B',options={'disp': True})
         #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='SLSQP',options={'disp': True})
         #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
@@ -1146,8 +1134,18 @@ class BCBlues(SubsurfaceSinks):
         Calibrate based on measured effluent concentration in the "timeseries"
         file and a test parameter name (string) and initial value (param0)
         flows should be a string with the filepath of a flow pickle or None
+
+        Attributes:
+        -----------        
+        timeseries (df) - Input timeseries
+        paramnames (list of str) - parameters to be tuned
+        param0s (list of float) - initial values for the parameters
+        bounds (list of tuples) - Bounds for the parameters. 
+        tolerance (optional, float) - what tolerance to run to
+        flows(df, optional) - Input flow file (if you doon't want to run for both)
+        objective (str, optional) - Run for what objective. Currently, will work for KGE by default
+        or recovery if you put something other than "None" in
         '''
-        #numc = self.numc
         #pdb.set_trace()
         #Define the optimization function
         def optBC_tracer(param,paramname,flows):
@@ -1163,8 +1161,6 @@ class BCBlues(SubsurfaceSinks):
                     #For depth of native soil, need to change locsumm
                     if paramname == 'native_depth':
                         locsummtest.loc['native_soil','Depth'] = paramtest.loc[paramname,'val']
-                #flowtest = self.flow_time(locsummtest,paramtest,['water','subsoil'],timeseries)
-                #input_calcs = self.input_calc(locsummtest,self.chemsumm,paramtest,self.pp,self.numc,timeseries,flow_time=flowtest)
                 if flows == None:#Run flows if no flow file given
                     res = self.flow_time(locsummtest,paramtest,['water','subsoil'],timeseries)
                     mask = timeseries.time>=0
@@ -1182,7 +1178,6 @@ class BCBlues(SubsurfaceSinks):
                     for ind,chem in enumerate(self.chemsumm.index):
                         KGE.append((hydroeval.evaluator(kge, np.array(Couts.loc[:,chem+'_Coutest']),\
                                           np.array(Couts.loc[:,chem+'_Coutmeas'])))[0])
-                    #timeseries.loc[:,'Q_drainout'] = np.array(flowtest.loc[(slice(None),'drain'),'Q_todrain'])
                     #Kling-Gupta Efficiency (modified Nash-Sutcliffe) can be our measure of model performance
                     #If multiple compounds given, this just takes the average.
                     eff = np.mean(KGE)
@@ -1195,9 +1190,7 @@ class BCBlues(SubsurfaceSinks):
             return obj
         
         
-        #ins = [param0]
-        #bnds = ((0.0,1.0),(0.0,1.0),(0.0,10000))
-        #bnds = ((0.0,1.0),(0.0,1.0))#,(0.0,1.0))
+        #Choose optimization function. Runs OK with L-BFGS-B, may need to change things to run others
         res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',tol=tolerance,options={'disp': True,'maxfun':100})
         #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='SLSQP',options={'disp': True})
         #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
@@ -1207,11 +1200,25 @@ class BCBlues(SubsurfaceSinks):
                   pltvals=False,savefig=False,figpath=None,interplims = [0.,1.],figsize=(10,6.7),
                   xlims=[-0.75,1.380211],ylims=None,vlims=[0.15,0.85],levels=15,xticks=None,yticks=None):
         '''
-        pltdata needs to contain the defined pltvars.
-        pltvars gives the contour variable (pltvar) and the x and y variables (in that order)
-        cmap defines the colormap which will shade the contours defined by pltvar.
+        Plot contourmaps showing some value (e.g. mass advected through the system) across intensity-duration-frequency events
+        This function interpolates between the simulated points to make a continuous surface.
+        
+        Attributes:
+        -----------  
+        pltdata (df) - Needs to contain the defined pltvars.
+        pltvars (str) - gives the contour variable (pltvar) and the x and y variables (in that order)
+        cmap (cmap object) - defines the colormap which will shade the contours defined by pltvar.
             By default goes from browns to blues
-        pltvals defines whether the values of pltvar will be annoted to the figure
+        pltvals (bool) - defines whether the values of pltvar will be annoted to the figure
+        savefig (bool) - save the figure or not
+        figpath (str) - if you want to save the fig, define the path and name here e.g. 'path/name'. Saves as PDf
+        interlplims (tuple) - max and min values for the interpolation
+        figsize (tuple) - size of figure as per matplotlib
+        xlims (tuple) - x limits for figure
+        ylims (tuple) - y limits for figure
+        vlims (tuple) - v limits for figure. Sets contour intensity
+        levels (int) - how many contour levels
+        xticks,yticks - show x and y ticks or not.
         
         '''
         #Define the colormap if not given
@@ -1222,23 +1229,18 @@ class BCBlues(SubsurfaceSinks):
         df = pltdata.loc[:,pltvars]
         #pltdata = pltdata.loc[:,[pltvar,'LogD','Intensity']]
         fig, ax = plt.subplots(1,1,figsize = figsize,dpi=300)
-
-        #pltvars = ['LogD','LogI']
-        #pltvars = ["LogD",'Intensity']
         df = df.pivot(index=pltvars[2],columns=pltvars[1])[pltvars[0]]
+        #Interpolate. Can change this to other interpolations at your own risk.
         df = df.interpolate(axis=0,method='spline',order=2)
-        #df = df.interpolate(axis=0,method='nearest')
-
-        #df = df.interpolate(axis=0,method='quadratic')
         df[np.isnan(df)] = 0
+        #Force values to stick to interplims.
         if interplims != None:
             df[df>interplims[1]] = interplims[1]
             df[df<interplims[0]] = interplims[0]
 
-        #Soil-water differences
+        #Plot contours
         pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,vmin=vlims[0],vmax=vlims[1],levels=levels)
-        #Other stuff
-        #pc = ax.contourf(df.columns,df.index,df.values,cmap=cmap,sep=1)
+        #Plot IDF curves on top
         sns.lineplot(x=pltvars[1],y=pltvars[2],data=pltdata.reset_index(),hue='Frequency',
                      ax=ax,palette=sns.color_palette('Greys')[:len(pltdata.Frequency.unique())],legend=False)
         #Set values
@@ -1254,9 +1256,19 @@ class BCBlues(SubsurfaceSinks):
             for ind in pltdata.index:
                 ax.annotate(str(pltdata.loc[ind,pltvars[0]]),xy= (pltdata.loc[ind,pltvars[1]],pltdata.loc[ind,pltvars[2]]))
         fig.colorbar(pc)
+        if savefig == True:
+            fig.savefig(figpath+'.pdf','pdf')
         return fig,ax
     
     def modify_timestep(self,timeseries,indfactor):
+        '''This method will modify the input timeseries by some integer (indfactor). Basically, 
+        divides the timeseries by the indfactor to give more temporal resolution.
+        
+        Attributes:
+        -----------  
+        timeseries (df) - Input timeseries to the model.
+        indfactor (int) - factor to change the timeseries by
+        '''
         #pdb.set_trace()
         if indfactor == 1:
             timeseries = timeseries.copy(deep=True)
@@ -1275,7 +1287,6 @@ class BCBlues(SubsurfaceSinks):
         nts = nts.astype(nt_dtypes)
         ind = 0
         while ind < len(nts.index):
-            #print(ind)
             nts.loc[ind,:] = timeseries.loc[(ind)/indfactor,:]
             ind += indfactor
         nts = nts.interpolate(method='linear')
