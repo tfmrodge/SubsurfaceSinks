@@ -8,8 +8,9 @@ The following Conda environment contains all required Python packages for runnin
 Step 0 - Install Conda. An easy way to do this is by installing [Anaconda](https://www.anaconda.com/), which also contains many Python packages<br>
 Step 1 - Clone my github repository from https://github.com/tfmrodge/SubsurfaceSinks<br>
 Step 2 - Open a terminal (I use Anaconda Prompt), then navigate to the github repository and run <pre><code> conda env create -f bcenv.yml</code></pre><br>
-Step 3 (optional) - Run the command <pre><code> conda activate bcenv</code></pre><br>
-Step 4 - Run the command <pre><code> jupyter notebook</code></pre> to open the list of notebooks, and open the "Bioretention Blues Model Tutorial". You may need to change the kernel (under Kernel>Change Kernel>FugModelEnv) in the Jupyter toolbar, or if you are in the correct environment in your terminal it will bring open with that kernel<br>
+Step 3 - Run the command <pre><code> conda activate bcenv</code></pre><br>
+Step 4 - Run the command <pre><code> pip install hydroeval</code></pre><br>
+Step 5 - Run the command <pre><code> jupyter notebook</code></pre> to open the list of notebooks, and open the "Bioretention Blues Model Tutorial". You may need to change the kernel (under Kernel>Change Kernel>FugModelEnv) in the Jupyter toolbar, or if you are in the correct environment in your terminal it will bring open with that kernel<br>
 ### Method 2
 Step 0 - Install Conda. An easy way to do this is by installing [Anaconda](https://www.anaconda.com/), which also contains many Python packages<br>
 Step 1 - Clone my github repository from https://github.com/tfmrodge/SubsurfaceSinks<br>
