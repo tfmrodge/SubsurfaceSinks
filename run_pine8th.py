@@ -26,20 +26,21 @@ pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 #numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
 #locsumm = pd.read_excel('inputfiles/QuebecSt_TreeTrench.xlsx',index_col = 0)
-locsumm = pd.read_excel('inputfiles/Pine8th_BC.xlsx',index_col = 0)
+locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
-#chemsumm.loc['Rhodamine','pKa'] = 999
+chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+#Change to episuite version
+#chemsumm.loc['6PPDQ','LogKocW'] = 3.928
 #chemsumm.loc['Rhodamine','chemcharge'] = 0
 #chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/params_Pine8th_1.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 #params.loc['f_apo','val'] = 0
 pp = None
 #testing the model
-timeseries = pd.read_excel('inputfiles/timeseries_Pine8th.xlsx')
-Cin = 1000 #ng/L
-Cin = Cin*1e-6 #Convert to g/m³
-timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 
+timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_Pine8th.xlsx')
+#Cin = 1000 #ng/L
+#Cin = Cin*1e-6 #Convert to g/m³
+#timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
 #timeseries = pd.read_excel('inputfiles/timeseries_wateryear.xlsx')
 #Run only for the first event
@@ -54,7 +55,7 @@ bc =  BCBlues(locsumm,chemsumm,params,timeseries,numc)
 pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 timedfname = 'mod_timeseries.pkl'
 #How much should we modify the time-step. Multiply the index by this number. 
-indfactor = 3#1#3#'Load' #3#3
+indfactor = 1#1#3#'Load' #3#3
 if indfactor == 'Load':
     timeseries = pd.read_pickle(pklpath+timedfname)
 else:
@@ -125,7 +126,7 @@ else:
 
 if runall != None:
     print(time.time()-codetime)
-    outname = 'outputspiketest1.pkl'
+    outname = 'outputspiketest_EPI.pkl'
     res.to_pickle(pklpath+outname)
     mass_flux = bc.mass_flux(res,numc) #Run to get mass flux
     mbal = bc.mass_balance(res,numc,mass_flux)
@@ -154,10 +155,5 @@ if plotfig == True:
     #Set time (hrs), any time after end gives the end.
     time = 8760#1000#6#1000#6#1000
     fig,ax = bc.BC_fig(numc,mass_balance=mbal_cum,time = time,compound=compound,figheight=6,fontsize=7,dpi=300)
-#bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/2014_results.pkl'
-#outpath = 'D:/GitHub/Vancouver_BC_Modeling/Pickles/6PPDQ_simstorm.pkl'
-#outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/6PPDQ_spiketest.pkl'
-#outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/6PPDQ_spiketest_30s.pkl'
 
 #'''
