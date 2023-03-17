@@ -684,7 +684,7 @@ class BCBlues(SubsurfaceSinks):
             try:
                 Sss = res.V[compartments[5]] /(res.V[compartments[4]]*(res.Porosity[compartments[4]])) 
                 Q10_exfds = 1/dt * ((1-Sss) * res.Porosity[compartments[4]]*res.V[compartments[4]])
-            except AttributeError:#If native soil not given, ignore it.
+            except IndexError:#If native soil not given, ignore it.
                 Q10_exfds = Q10_exfus
             Q10_exf = max(min(Q10_exfp,Q10_exfus,Q10_exfds),0)
             dVdest = (Qin_d - Qcap - Q10_exf)*dt #Estimate the height for outflow - assuming free surface at top of bucket
