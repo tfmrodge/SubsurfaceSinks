@@ -145,4 +145,8 @@ dependencies:
   - zeromq=4.3.4
   - zlib=1.2.13
   - zstd=1.5.2
+  - pip:
+      - et-xmlfile==1.1.0
+      - hydroeval==0.1.0
+      - openpyxl==3.1.2
 prefix: C:\Users\Timot\anaconda3\envs\bcenv
