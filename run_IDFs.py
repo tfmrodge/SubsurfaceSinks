@@ -33,16 +33,16 @@ numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','p
 #locsumm = pd.read_excel('inputfiles/Pine8th/QuebecSt_TreeTrench.xlsx',index_col = 0)
 locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Pine8th/PPD_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/Pine8th/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params = pd.read_excel('inputfiles/Pine8th/params_Pine8th_1.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
+params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
 #Design Tests
 def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
-    params = pd.read_excel('inputfiles/Pine8th/params_Pine8th_1.xlsx',index_col = 0)
+    params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
     params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
@@ -127,7 +127,9 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #Define the Qin and rain rate based on the frequency
     timeseries.loc[:,'Qin'] = timeseries.loc[:,dur_freq[1] + '_Qin']
     timeseries.loc[:,'RainRate'] = timeseries.loc[:,dur_freq[1] + '_RainRate']
-    timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
+    for compound in chemsumm.index:
+        minname = compound+'_Min'
+        timeseries.loc[:,minname] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
     bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
     #Next, run the model!
     #flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
@@ -165,8 +167,8 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #Calculate concentration reduction as the average effluent concentration divided by the 
     res.loc[:,'Conc_red'] = 1- res.MEC_ngl/Cin*1e-6
     #Calculate the time-integrated risk quotient = sum((concentration/reference concentration)*dt)/sum(dt)
-    ref_conc = 95/298.400 #nmol/L, Coho Salmon LC50 for 6PPD-Q
-    res.loc[:,'RQ_av'] = res.loc[:,'MEC_ngl']/95.0
+    ref_conc = Cin#95/298.400 #nmol/L, Coho Salmon LC50 for 6PPD-Q
+    res.loc[:,'RQ_av'] = res.loc[:,'MEC_ngl']/Cin*1e-6
     res.loc[:,'RQ_sum'] = (1e6*(((mass_flux.loc[:,['N_effluent','Nadvpond']].sum(axis=1)).groupby(level=[0,1]).sum())\
                       /np.array(Q_stormsewer))/ref_conc).groupby(level=0).sum()  
     #Now, we will calculate the flow rate of a receiving bo♣dy that would be required to keep the risk low
@@ -223,7 +225,7 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
 #          (1,1,0,0,1,1),(1,1,0,0,0,1))
 combos = ((0,0,0,0,0,0,0),)#,((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
 #pdb.set_trace()
-runwateryear = True
+runwateryear = False
 if runwateryear == True:
     n_jobs = len(combos)
     timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_wateryear.xlsx')
@@ -251,7 +253,7 @@ else:
             
         outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
         filtered = [k for k,v in scenario_dict.items() if v == True]
-        outname = 'IDF_lowkn'+'_'.join(filtered)+'.pkl'
+        outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
         if outname in os.listdir(outpath):
             continue #Skip if already done
@@ -264,17 +266,18 @@ else:
         locsumm_test, params_test = design_tests(scenario_dict)
         #pdb.set_trace()
         #chemsumm = chemsumm.loc['6PPDQ']
-        # for dur_freq in dur_freqs:
-        #     dur_freq = dur_freqs[2]
-        #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        #for dur_freq in dur_freqs:
+        #    dur_freq = dur_freqs[2]
+        #    res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
         res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
         #codetime = time.time()-tstart
         res = pd.concat(res)
         #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
-        res = res.loc['6PPDQ',:] 
+        #res = res.loc['6PPDQ',:]
         res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
         res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
-        res.loc[:,'Intensity'] = intensities
+        for compound in chemsumm.index:
+            res.loc[compound,'Intensity'] = intensities
         res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
         #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
         
