@@ -515,7 +515,11 @@ class BCBlues(SubsurfaceSinks):
             else:
                 Qover = 0
             #Flow over weir
-            if res.Depth.pond > params.val.Hw:
+            #pdb.set_trace()
+            #20230420 - Added "testdepth" as old code only allowed for overflow on the timestep after pond went over the weir
+            testdepth = np.interp(res.loc[compartments[0],'V']+(inflow + Qr_in - Q26 - Qover)*dt,pondV,pondH, left = 0, right = pondH[-1])
+            #if res.Depth.pond > params.val.Hw:
+            if testdepth > params.val.Hw:
                 #Physically possible
                 def pond_depth(pond_depth):
                     if pond_depth < params.val.Hw:
@@ -541,6 +545,7 @@ class BCBlues(SubsurfaceSinks):
                 Q2_wp = params.val.Cq * params.val.Bw * np.sqrt(2.*9.81*3600.**2.*(res.Depth.pond - params.val.Hw)**3.)
                 #Upstream Control
                 Q2_wus = 1/dt * ((res.Depth.pond - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26-Qover
+                
                 Q2_w = max(min(Q2_wp,Q2_wus),0)
             else:
                 Q2_w = 0
@@ -644,6 +649,9 @@ class BCBlues(SubsurfaceSinks):
                 #Upstream available
                 Q6_etus = 1/dt* ((Sss-params.val.Sh)*res.V[compartments[0]]*res.Porosity[compartments[0]]) +(Qin_f+Qcap-Qinf_f)
                 Qet_f = max(min(Q6_etp,Q6_etus),0) 
+                #20230419 - Zero ET if it is raining ***Potential Upgrade - calculate ETmax from P-M equation***
+                if rainrate > 0.0:
+                    pass#Qet_f = 0
                 #Qet_f = 0
 
             #Change in pore water volume dVf at t
@@ -866,8 +874,8 @@ class BCBlues(SubsurfaceSinks):
                 params.loc['Emax','val'] = timeseries.loc[t,'Max_ET']
             except KeyError:
                 pass
-            #if t == 241:#216:#Break at specific timing 216 = first inflow
-            if timeseries.time[t] == 0.0:
+            if t == 260:#216:#Break at specific timing 216 = first inflow
+            #if timeseries.time[t] == 0.0:
                 #pdb.set_trace()
                 yomama = 'great'
             res = self.bc_dims(res,inflow,rainrate,dt,params)

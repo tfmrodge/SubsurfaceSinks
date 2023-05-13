@@ -455,7 +455,9 @@ class FugModel(metaclass=ABCMeta):
             if res.loc[res.ndm,'Dadvpond'].sum()>0:
                 #Mass out
                 res.loc[res.ndm,'Mover_p'] = pondastar*res.loc[res.ndm,'Dadvpond']*dt
-                res.loc[res.ndm,'Dadvpond'] = 0.#Mover_p/pondastar/dt
+                DTval = 'DT' + str(numc.index('pond')+1)
+                res.loc[res.ndm,DTval] -= res.loc[res.ndm,'Dadvpond']#Take Dadvpond out of DTpond
+                res.loc[res.ndm,'Dadvpond'] = 0.#Set Dadvpond to zero
             else:
                 res.loc[res.ndm,'Mover_p'] = 0.
             #Next, we resolve this time step by making it part of the RHS for the pond cell.

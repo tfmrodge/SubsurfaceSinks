@@ -27,8 +27,8 @@ pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
 #locsumm = pd.read_excel('inputfiles/QuebecSt_TreeTrench.xlsx',index_col = 0)
 locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/PPD_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 #Change to episuite version
 #chemsumm.loc['6PPDQ','LogKocW'] = 3.928
 #chemsumm.loc['Rhodamine','chemcharge'] = 0
@@ -38,7 +38,10 @@ params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_Pine8th.xlsx')
-#Cin = 1000 #ng/L
+Cin = 1000 #ng/L
+for compound in chemsumm.index:
+    minname = compound+'_Min'
+    timeseries.loc[:,minname] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
 #Cin = Cin*1e-6 #Convert to g/m³
 #timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
@@ -66,7 +69,7 @@ else:
         pass
     
 #pdb.set_trace()
-calcflow = True#True
+calcflow = 'Load'#True
 flowname = 'flowtest.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
