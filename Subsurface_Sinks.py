@@ -164,6 +164,15 @@ class SubsurfaceSinks(FugModel):
                 #pdb.set_trace()
                 res.loc[maskn,Kdj] = res.loc[:,focj].mul(10.**chemsumm.LogKocW, level = 0)
                 res.loc[maski,Kdij] = res.loc[:,focj].mul(10.**(chemsumm.LogKocW-3.5), level = 0) #3.5 log units lower from Franco & Trapp (2010)
+                #20230413 - Adding amendments. We are going to assume linear addition of amendment
+                #with organic matter so that Kd(overall) (L/kg) = Koc*foc+Kdam*fam. We are also going to assume that
+                #the Kd value given is the same for neutral and ionic (if ionizable)
+                if j in ['subsoil']:
+                    try:
+                        res.loc[maskn,Kdj] += res['dummy'].mul((10.**chemsumm.LogKdam)*params.loc['famendment','val'], level = 0)
+                        res.loc[maski,Kdij] += res['dummy'].mul((10.**chemsumm.LogKdam)*params.loc['famendment','val'], level = 0)
+                    except AttributeError: 
+                        pass
                 res.loc[:,Kdj] = vant_conv(res.dUow,res.loc[:,tempj],res.loc[:,Kdj]) #Convert with dUow
                 #The ionic Kd value is based off of pKa and neutral Kow
                 res.loc[:,Kdij] = vant_conv(res.dUow,res.loc[:,tempj],res.loc[:,Kdij])
@@ -424,15 +433,23 @@ class SubsurfaceSinks(FugModel):
                             #Drainage (if present). 20220819 - made this implicit.
                             #pdb.set_trace()
                             res.loc[:,'D_waterdrain'] = 0 
+                            res.loc[:,'D_cap'] = 0 
                             try:
                                 draincell = int(res.dm.groupby(level=2).mean().sum()-1)
                                 res.loc[(slice(None),slice(None),draincell),'D_waterdrain'] = \
                                     res.loc[(slice(None),slice(None),draincell),'Qout']\
                                         *res.loc[(slice(None),slice(None),draincell),'Zw_water']
+                                #TR20230628 - Added capillary flow as am advective process - not in DT values or anywhere else. 
+                                #pdb.set_trace()
+                                res.loc[(slice(None),slice(None),draincell),'D_cap'] = \
+                                    res.loc[(slice(None),slice(None),draincell),'Qcap']\
+                                        *res.loc[(slice(None),slice(None),draincell),'Zw_water']
+                                        
+                                #res.loc[(slice(None),slice(None),draincell-1),'D_drainwater'] = res.loc[(slice(None),slice(None),draincell),'D_drainwater']
                             except KeyError:
                                 pass
 
-                            res.loc[mask,D_jk] = res.loc[:,'D_waterexf'] + res.loc[:,'D_waterdrain']                       
+                            res.loc[mask,D_jk] = res.loc[:,'D_waterexf'] + res.loc[:,'D_waterdrain'] + res.loc[:,'D_cap'] 
                         elif k in ['subsoil','topsoil']:
                             if k in ['subsoil']:
                                 y = Ymob_immob
@@ -781,6 +798,7 @@ class SubsurfaceSinks(FugModel):
                 for kind, k in enumerate(numc): #Inner loop for inter-compartmental values
                     kind = kind+1 #The compartment number, for overall & intercompartmental D values
                     D_jk,D_kj = 'D_'+str(jind)+str(kind),'D_'+str(kind)+str(jind)
+                    #Pond overflow is done explicitly - so we will set Dadvj to 0
                     try: #First, check if intercompartmental transport between jk already done
                         res.loc[:,D_jk]
                     except KeyError:
@@ -918,7 +936,7 @@ class SubsurfaceSinks(FugModel):
             #Feed the time to params
             res_t = res.loc[(slice(None),t,slice(None)),:]
             #For error checking, stop at specific time
-            if (t == 287) or (t==290):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
+            if (t == 260) or (t==265):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
                 #pdb.set_trace() #143.39999999996508
                 dangit = 'cute_cat'
             #Call the ADRE code in the FugModel module
@@ -937,6 +955,10 @@ class SubsurfaceSinks(FugModel):
                 res.loc[(slice(None),t,slice(None)),'Min'] = res_t.loc[(slice(None),t,slice(None)),'Min']
                 res.loc[(slice(None),t,slice(None)),'Mqin'] = 0
                 res.loc[(slice(None),t,slice(None)),'Min_p'] = res.loc[(slice(None),t,slice(None)),'Min']
+            try:#Add pond overflow
+                res.loc[(slice(None),t,slice(None)),'Mover_p'] = res_t.loc[(slice(None),t,slice(None)),'Mover_p']
+            except KeyError:
+                pass
             res.loc[(slice(None),t,slice(None)),'M_xf'] = res_t.loc[(slice(None),t,slice(None)),'M_xf']
             res.loc[(slice(None),t,slice(None)),'M_n'] = res_t.loc[(slice(None),t,slice(None)),'M_n']
 
@@ -986,8 +1008,8 @@ class SubsurfaceSinks(FugModel):
                 #Growth dilution processes - in DT but nowhere else.
                 Nrg_j,D_rgj = "Ng_"+str(j),"D_g"+str(j)
                 mass_flux.loc[:,Nrg_j] = (res_time.loc[:,D_rgj] * res_time.loc[:,a_val])    
-            #elif j == 'pond':
-            #    mass_flux.loc[:,Nadvj] = res_time.loc[:,'Mover_p']/res_time.dt
+            elif j == 'pond':#Pond overflow mass loss
+                mass_flux.loc[:,Nadvj] = res_time.loc[:,'Mover_p']/res_time.dt
             for kind, k in enumerate(numc):#From compartment j to compartment k
                 if j != k:
                     kind = kind+1
