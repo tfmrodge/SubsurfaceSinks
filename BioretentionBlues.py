@@ -175,9 +175,12 @@ class BCBlues(SubsurfaceSinks):
                      index=res.index.levels[0]).reindex(res.index,level=0)[0]-\
             Qslope*(res.x + res.dx/2)
         #Water out in last cell is flow to the drain, this is also water into the drain. Net change with capillary flow
+        # res.loc[(slice(None),numx),'Qin'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
+        #              index=res.index.levels[0]).reindex(res.index,level=0)[0]\
+        # -pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_towater']),
+        #              index=res.index.levels[0]).reindex(res.index,level=0)[0]
+        #TR20230628 - Updated to allow for capillary flow upwards as its own process. 
         res.loc[(slice(None),numx),'Qin'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'Q_todrain']),
-                     index=res.index.levels[0]).reindex(res.index,level=0)[0]\
-        -pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_towater']),
                      index=res.index.levels[0]).reindex(res.index,level=0)[0]
         
         #We will put the flow going into the ponding zone into the non-discretized cell.
@@ -235,13 +238,17 @@ class BCBlues(SubsurfaceSinks):
         res.loc[(slice(None),numx),'Qout'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_todrain']),
                      index=res.index.levels[0]).reindex(res.index,level=0)[0]
         #If we want more capillary rise than drain zone to filter - currently just net flow is recored.
-        res.loc[res.dm,'Qcap'] = 0 #
+        #pdb.set_trace()
+        res.loc[(slice(None),numx),'Qcap'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'Q_towater']),
+                      index=res.index.levels[0]).reindex(res.index,level=0)[0] #
         #Then water volume and velocity
         dt = timeseries.loc[(slice(None),numc[0]),'time'] - timeseries.loc[(slice(None),numc[0]),'time'].shift(1)
         dt[np.isnan(dt)] = dt.iloc[1]
         #2022-10-11 since all flows are spread among all cells, this is true
         res.loc[(slice(None),slice(numx-1)),'V1'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'V']/numx),
                      index=res.index.levels[0]).reindex(res.index,level=0)[0]
+        #2023-06-28 - need to add Qcap into final cell
+        res.loc[(slice(None),numx-1),'V1'] +=  np.array(res.loc[(slice(None),numx),'Qcap'])* np.array(dt)
         
         '''2022-10-11 Removed as it was equivalent to above expression for current set-up
         #Matrix solution to volumes. Changed from running through each t to running through each x, hopefully faster.
@@ -508,6 +515,7 @@ class BCBlues(SubsurfaceSinks):
             Q26 = max(min(Qinf_poss,Qinf_us,Qinf_ds),0)
             #Overflow from system - everything over top of cell 
             if res.V.pond > pondV[-1]: #pond is larger than ponding capacity
+                #pdb.set_trace()
                 Qover = (1/dt)*(res.V.pond-pondV[-1])
                 res.loc[compartments[0],'V'] += -Qover*dt
                 res.loc[compartments[0],'Depth'] = np.interp(res.V.pond,pondV,pondH, left = 0, right = pondH[-1])
@@ -517,7 +525,8 @@ class BCBlues(SubsurfaceSinks):
             #Flow over weir
             #pdb.set_trace()
             #20230420 - Added "testdepth" as old code only allowed for overflow on the timestep after pond went over the weir
-            testdepth = np.interp(res.loc[compartments[0],'V']+(inflow + Qr_in - Q26 - Qover)*dt,pondV,pondH, left = 0, right = pondH[-1])
+            #testdepth = np.interp(res.loc[compartments[0],'V']+(inflow + Qr_in - Q26 - Qover)*dt,pondV,pondH, left = 0, right = pondH[-1])
+            testdepth = np.interp(res.loc[compartments[0],'V']+(inflow + Qr_in - Q26)*dt,pondV,pondH, left = 0, right = pondH[-1])
             #if res.Depth.pond > params.val.Hw:
             if testdepth > params.val.Hw:
                 #Physically possible
@@ -526,9 +535,11 @@ class BCBlues(SubsurfaceSinks):
                         minimizer = 999
                     else:
                         Q2_wp = params.val.Cq * params.val.Bw * np.sqrt(2.*9.81*3600.**2.*(pond_depth - params.val.Hw)**3.)
-                        Q2_wus =  1/dt * ((pond_depth - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26-Qover
+                        #Q2_wus =  1/dt * ((pond_depth - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26-Qover
+                        Q2_wus =  1/dt * ((pond_depth - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26
                         Q2_w = max(min(Q2_wp,Q2_wus),0)
-                        dVp = (inflow + Qr_in - Q26 - Q2_w-Qover)*dt
+                        #dVp = (inflow + Qr_in - Q26 - Q2_w-Qover)*dt
+                        dVp = (inflow + Qr_in - Q26 - Q2_w)*dt
                         oldV = res.loc[compartments[0],'V']
                         testV = oldV + dVp
                         oldD = pond_depth
@@ -544,7 +555,8 @@ class BCBlues(SubsurfaceSinks):
                     res.loc[compartments[0],'Depth'] = params.val.Hw
                 Q2_wp = params.val.Cq * params.val.Bw * np.sqrt(2.*9.81*3600.**2.*(res.Depth.pond - params.val.Hw)**3.)
                 #Upstream Control
-                Q2_wus = 1/dt * ((res.Depth.pond - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26-Qover
+                #Q2_wus = 1/dt * ((res.Depth.pond - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26-Qover
+                Q2_wus = 1/dt * ((res.Depth.pond - params.val.Hw)*res.Area.pond) + (Qr_in+inflow) - Q26
                 
                 Q2_w = max(min(Q2_wp,Q2_wus),0)
             else:
@@ -558,7 +570,8 @@ class BCBlues(SubsurfaceSinks):
             Q2_exf = max(min(Qpexf_poss,Qpexf_us),0) #Actual exfiltration
             #pond Volume from mass balance
             #Change in pond volume dVp at t 
-            dVp = (inflow + Qr_in - Q26 - Q2_w-Qover - Q2_exf)*dt
+            #dVp = (inflow + Qr_in - Q26 - Q2_w-Qover - Q2_exf)*dt
+            dVp = (inflow + Qr_in - Q26 - Q2_w - Q2_exf)*dt
             #(inflow + Qr_in - Q26 - Q2_w- Qover)*dt
             if (res.loc[compartments[0],'V'] + dVp) < 0:
                 #Correct, this will only ever be a very small error.
@@ -624,12 +637,37 @@ class BCBlues(SubsurfaceSinks):
                 Q6_inf_us = 0#(Qin_f+Qcap)
             else:#Here we use the saturation value at the last time step, not the actual one. This should keep at hygroscopic point.
                 Q6_inf_us = 1/dt*((Sss-params.val.Sh)*res.Porosity[compartments[0]]*res.V[compartments[0]])+(Qin_f+Qcap)
-            Qinf_f = max(min(Q6_infp,Q6_inf_us),0)
+            #20230627 - Adding downstream space available.
+            if compartments[2] == None: #We assume native soil can drain unrestricted 
+                Q6_inf_ds = Q6_infp
+            else:#Space available in drainage zone. 
+                #Calculate max pipe flow    
+                htot = res.Depth.drain+res.loc['filter','Depth']*res.loc['filter','Porosity']*S_est+res.Depth.pond
+                #htot = draindepth_est+res.loc['filter','Depth']+res.loc['pond','Depth']
+                Co = params.val.Cd*1/4*np.pi*(params.val.Dpipe*params.val.fvalveopen)**2*np.sqrt(2*9.81*3600**2*htot)
+                #Then, we take the lower of the upstream control and the downstream (valve) control as the outlet.
+                Qmaxpipe = Co*1**1.5
+                #Next, max drain exfiltration
+                try:
+                    Q10_exfp = params.val.Kn_unsat * (res.Area.drain + params.val.Cs*\
+                               res.P.drain*res.Depth.drain_pores/res.Depth.drain)
+                except AttributeError:#If no unsat is given, will just use saturated value. Not ideal without spin-up period.
+                    Q10_exfp = params.val.Kn * (res.Area.drain + params.val.Cs*\
+                               res.P.drain*res.Depth.drain_pores/res.Depth.drain)
+                try:
+                    Sss = res.V['native_pores'] /(res.V['native_soil']*(res.Porosity['native_soil'])) 
+                    Q10_exfds = 1/dt * ((1-Sss) * res.Porosity['native_soil']*res.V['native_soil'])
+                except IndexError:#If native soil not given, ignore it.
+                    Q10_exfds = Q10_exfp
+                Qmaxdrainexf = max(min(Q10_exfp,Q10_exfds),0)
+                Q6_inf_ds = (res.V.drain*res.Porosity.drain - res.V[compartments[2]])/dt - min(Q6_infp,Q6_inf_us) + Qmaxpipe + Qmaxdrainexf            
+            Qinf_f = max(min(Q6_infp,Q6_inf_us,Q6_inf_ds),0)
             #TR 20230110 - restricting capillary flow to ensure flow is always down into drainzone (no net backflow)
-            while Qcap > Qinf_f:
-                Qcap = Qinf_f
-                Q6_inf_us = 1/dt*((Sss-params.val.Sh)*res.Porosity[compartments[0]]*res.V[compartments[0]])+(Qin_f+Qcap)
-                Qinf_f = max(min(Q6_infp,Q6_inf_us),0)
+            #TR 20230628 - this doesn't work when we want backflow
+            # while Qcap > Qinf_f:
+            #     Qcap = Qinf_f
+            #     Q6_inf_us = 1/dt*((Sss-params.val.Sh)*res.Porosity[compartments[0]]*res.V[compartments[0]])+(Qin_f+Qcap)
+            #     Qinf_f = max(min(Q6_infp,Q6_inf_us),0)
                 
             #Native soil unconnected to plants - no ET. 
             if compartments[0] == 'native_soil':
@@ -874,7 +912,7 @@ class BCBlues(SubsurfaceSinks):
                 params.loc['Emax','val'] = timeseries.loc[t,'Max_ET']
             except KeyError:
                 pass
-            if t == 260:#216:#Break at specific timing 216 = first inflow
+            if (t == 255) or (t==2016):#216:#Break at specific timing 216 = first inflow
             #if timeseries.time[t] == 0.0:
                 #pdb.set_trace()
                 yomama = 'great'
@@ -905,7 +943,7 @@ class BCBlues(SubsurfaceSinks):
 
     def draintimes(self,timeseries,res_time):
         """
-        Determine the draindage times - time between peak depth and zero depth (https://wiki.sustainabletechnologies.ca/wiki/Bioretention:_Sizing)     
+        Determine the drainage times - time between peak depth and zero depth (https://wiki.sustainabletechnologies.ca/wiki/Bioretention:_Sizing)     
         
         Attributes:
         ----------- 
@@ -913,23 +951,28 @@ class BCBlues(SubsurfaceSinks):
         res_time - output from the flow_time method.
         """
         #Find the places where depth is zero. The time between these indices are our events. 
-        zerodepths = timeseries.iloc[np.where(res_time.loc[(slice(None),'pond'),'Depth'] == 0.)].time
-        zerodepths = zerodepths[zerodepths>0]
-        draintimes = []
-        drainidx = []
         #pdb.set_trace()
-        for ind,idx in enumerate(zerodepths.index):
-            #Skip first cell and any consecutive indices 
-            if (idx == zerodepths.index[0]) | (idx-1 in zerodepths.index):
-                pass
-            else:
-                lastzero = zerodepths.index[np.where(zerodepths == zerodepths.iloc[ind-1])[0][0]]
-                maxDind = lastzero+ np.where(res_time.loc[(slice(lastzero,idx),'pond'),'Depth']
-                == max(res_time.loc[(slice(lastzero,idx),'pond'),'Depth']))[0][0]
-                draintimes.append(zerodepths[idx] - timeseries.loc[maxDind,'time'])
-                drainidx.append(idx) 
+        ponddata = res_time.loc[(slice(None),'pond'),:]
+        mask = ponddata.Depth == 0.
+        zerodepths = ponddata.loc[mask,'time']
+        #zerodepths = timeseries.iloc[np.where(res_time.loc[(slice(None),'pond'),'Depth'] == 0.)].time
+        zerodepths = zerodepths[zerodepths>0]
+        draintimes = (zerodepths - zerodepths.shift(1))
+        # draintimes = []
+        # drainidx = []
+        #pdb.set_trace()
+        # for ind,idx in enumerate(zerodepths.index):
+        #     #Skip first cell and any consecutive indices 
+        #     if (idx == zerodepths.index[0]) | (idx-1 in zerodepths.index):
+        #         pass
+        #     else:
+        #         lastzero = zerodepths.index[np.where(zerodepths == zerodepths.iloc[ind-1])[0][0]]
+        #         maxDind = lastzero+ np.where(res_time.loc[(slice(lastzero,idx),'pond'),'Depth']
+        #         == max(res_time.loc[(slice(lastzero,idx),'pond'),'Depth']))[0][0]
+        #         draintimes.append(zerodepths[idx] - timeseries.loc[maxDind,'time'])
+        #         drainidx.append(idx) 
         
-        return draintimes, drainidx   
+        return draintimes #, drainidx   
             
     def BC_fig(self,numc,mass_balance,time=None,compound=None,figname='BC_Model_Figure.tif',dpi=100,fontsize=8,figheight=6,dM_locs=None,M_locs=None):
             """ 
@@ -966,7 +1009,7 @@ class BCBlues(SubsurfaceSinks):
                                     dM_locs=dM_locs,M_locs=M_locs)
             return fig,ax
     
-    def run_BC(self,locsumm,chemsumm,timeseries,numc,params,pp=None):
+    def run_BC(self,locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time=None):
         """
         Run the BC Blues model! This will run the entire model with a given
         parameterization.              
@@ -986,11 +1029,12 @@ class BCBlues(SubsurfaceSinks):
         #Run the model
         #pdb.set_trace()
         #The flows are calculated only with the water and soil compartments as numc
-        flow_time = bioretention_cell.flow_time(locsumm,params,['water','subsoil'],timeseries)
-        mask = timeseries.time>=0
-        minslice = np.min(np.where(mask))
-        maxslice = np.max(np.where(mask))#minslice + 5 #
-        flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
+        if flow_time is None:
+            flow_time = bioretention_cell.flow_time(locsumm,params,['water','subsoil'],timeseries)
+            mask = timeseries.time>=0
+            minslice = np.min(np.where(mask))
+            maxslice = np.max(np.where(mask))#minslice + 5 #
+            flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
         input_calcs = bioretention_cell.input_calc(locsumm,chemsumm,params,pp,numc,timeseries,flow_time=flow_time)
         model_outs = bioretention_cell.run_it(locsumm,chemsumm,params,pp,numc,
                                          timeseries,input_calcs=input_calcs)       
@@ -1233,13 +1277,17 @@ class BCBlues(SubsurfaceSinks):
         if cmap == None:
             cmap = sns.diverging_palette(30, 250, l=40,s=80,center="light", as_cmap=True)#sep=1,
         
-        #Only the variables we care about
-        df = pltdata.loc[:,pltvars]
-        #pltdata = pltdata.loc[:,[pltvar,'LogD','Intensity']]
+        
         fig, ax = plt.subplots(1,1,figsize = figsize,dpi=300)
+        #Only the variables we care about
+        #pltdata = pltdata.loc[:,[pltvar,'LogD','Intensity']]
+        df = pltdata.loc[:,pltvars]
         df = df.pivot(index=pltvars[2],columns=pltvars[1])[pltvars[0]]
         #Interpolate. Can change this to other interpolations at your own risk.
-        df = df.interpolate(axis=0,method='spline',order=2)
+        df.loc[0,:] = 0.#Added 2023-06-15 to provide reasonable endpoint for interpolation
+        df = df.sort_index()
+        #df = df.interpolate(axis=0,method='spline',order=2)
+        df = df.interpolate(axis=0,method='linear')
         df[np.isnan(df)] = 0
         #Force values to stick to interplims.
         if interplims != None:
@@ -1266,6 +1314,7 @@ class BCBlues(SubsurfaceSinks):
         fig.colorbar(pc)
         if savefig == True:
             fig.savefig(figpath+'.pdf','pdf')
+        ax.set_ylim(0.553888676804602, 2.1372404125119426)
         return fig,ax
     
     def modify_timestep(self,timeseries,indfactor):

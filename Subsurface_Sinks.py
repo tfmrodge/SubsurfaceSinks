@@ -433,15 +433,23 @@ class SubsurfaceSinks(FugModel):
                             #Drainage (if present). 20220819 - made this implicit.
                             #pdb.set_trace()
                             res.loc[:,'D_waterdrain'] = 0 
+                            res.loc[:,'D_cap'] = 0 
                             try:
                                 draincell = int(res.dm.groupby(level=2).mean().sum()-1)
                                 res.loc[(slice(None),slice(None),draincell),'D_waterdrain'] = \
                                     res.loc[(slice(None),slice(None),draincell),'Qout']\
                                         *res.loc[(slice(None),slice(None),draincell),'Zw_water']
+                                #TR20230628 - Added capillary flow as am advective process - not in DT values or anywhere else. 
+                                #pdb.set_trace()
+                                res.loc[(slice(None),slice(None),draincell),'D_cap'] = \
+                                    res.loc[(slice(None),slice(None),draincell),'Qcap']\
+                                        *res.loc[(slice(None),slice(None),draincell),'Zw_water']
+                                        
+                                #res.loc[(slice(None),slice(None),draincell-1),'D_drainwater'] = res.loc[(slice(None),slice(None),draincell),'D_drainwater']
                             except KeyError:
                                 pass
 
-                            res.loc[mask,D_jk] = res.loc[:,'D_waterexf'] + res.loc[:,'D_waterdrain']                       
+                            res.loc[mask,D_jk] = res.loc[:,'D_waterexf'] + res.loc[:,'D_waterdrain'] + res.loc[:,'D_cap'] 
                         elif k in ['subsoil','topsoil']:
                             if k in ['subsoil']:
                                 y = Ymob_immob

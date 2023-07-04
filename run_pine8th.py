@@ -38,6 +38,25 @@ params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 pp = None
 #testing the model
 timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_Pine8th.xlsx')
+durations = ['10min','30min', '1hr','2hr', '6hr','12hr','24hr']
+dur_dict = {'10min':10/60,'30min':30/60, '1hr':1.0,'2hr':2.0, '6hr':6.0,'12hr':12.0,'24hr':24.0}
+intensities = [34.581917698987,67.2409410804227,118.178784076204,137.164085563433,20.9467490187692,38.3517651852434,
+               64.1705454107794,73.4522738958964,15.2666149456928,26.9112661085693,43.6526658205085,49.5307503897111,
+               11.1267639523064,18.8835178789863,29.6951696613895,33.39985413719,6.73963583884412,10.7704656111228,
+               16.1243428601216,17.8858425227741,4.91204745584287,7.55758867353632,10.9687481373651,12.0608819103516,
+               3.58004657601657,5.3031269603961,7.46160241968732,8.13296171372551]
+frequencies = ['2yr','10yr','100yr','200yr']
+dur_freqs = []#np.zeros((numtrials, 2),dtype=str)
+#ind = 0
+for duration in durations:
+    for freq in frequencies:
+        dur_freqs.append([str(duration),str(freq)])
+dur_freq = dur_freqs[23]
+timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms_old.xlsx',sheet_name=dur_freq[0])
+timeseries.loc[:,'Qin'] = timeseries.loc[:,dur_freq[1] + '_Qin']
+timeseries.loc[:,'RainRate'] = timeseries.loc[:,dur_freq[1] + '_RainRate']
+
+
 Cin = 1000 #ng/L
 for compound in chemsumm.index:
     minname = compound+'_Min'
@@ -70,7 +89,7 @@ else:
     
 #pdb.set_trace()
 calcflow = 'Load'#True
-flowname = 'flowtest.pkl'
+flowname = 'IDFouts/flowtime_EngDesign_lowKn12hr_200yr.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     mask = timeseries.time>=0

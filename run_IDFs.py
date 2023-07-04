@@ -25,18 +25,18 @@ from joblib import Parallel, delayed
 from warnings import simplefilter
 simplefilter(action="ignore", category= FutureWarning)
 #Testing the modelres
-#Load parameterization files
+#Load parameterization files 
 pdb.set_trace()
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 tstart = time.time()
-#For the vancouver tree trench, no ponding zone. 
+#For the vancouver tree trench, no ponding z`one. 
 #numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
 numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
 #locsumm = pd.read_excel('inputfiles/Pine8th/QuebecSt_TreeTrench.xlsx',index_col = 0)
 locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Pine8th/PPD_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
+#chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
@@ -45,7 +45,7 @@ def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
     params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
-    #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
+    params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -79,18 +79,21 @@ def design_tests(scenario_dict):
     if scenario_dict['Hp'] == True:
         Weirfactor = 2
         params.loc['Hw','val'] = params.val.Hw*Weirfactor
-        Ds = np.array(params.val.BC_Depth_Curve.split(","),dtype='float')
-        step = (Ds[1]-Ds[0])
-        numsteps = int((params.val.Hw - max(Ds))/step)
-        Ds = np.concatenate((Ds,np.linspace(max(Ds)+step,params.val.Hw,numsteps)))
+        #TR20230616 - Change to weir calculations included changing size of system to match geometry
+        #above weir. This code no longer works, and isn't necessary - assumning same height of system
+        #with just the weir changing 
+        #Ds = np.array(params.val.BC_Depth_Curve.split(","),dtype='float')
+        #step = (Ds[1]-Ds[0])
+        #numsteps = int((params.val.Hw - max(Ds))/step)
+        #Ds = np.concatenate((Ds,np.linspace(max(Ds)+step,params.val.Hw,numsteps)))
         #Change the areas to match - we will just keep using the top area.
-        As = np.array(params.val.BC_Area_curve.split(","),dtype='float')
-        As = np.concatenate((As,np.zeros(numsteps)+max(As)))
-        Vs = np.array(params.val.BC_Volume_Curve.split(","),dtype='float')
-        Vs =  np.concatenate((Vs,((np.zeros(numsteps)+max(As))*step).cumsum()+max(Vs)))
-        params.loc['BC_Depth_Curve','val'] = np.array2string(Ds,separator=",")[1:-1]
-        params.loc['BC_Area_curve','val'] = np.array2string(As,separator=",")[1:-1]
-        params.loc['BC_Volume_Curve','val'] = np.array2string(Vs,separator=",")[1:-1]
+        #As = np.array(params.val.BC_Area_curve.split(","),dtype='float')
+        #As = np.concatenate((As,np.zeros(numsteps)+max(As)))
+        #Vs = np.array(params.val.BC_Volume_Curve.split(","),dtype='float')
+        #Vs =  np.concatenate((Vs,((np.zeros(numsteps)+max(As))*step).cumsum()+max(Vs)))
+        #params.loc['BC_Depth_Curve','val'] = np.array2string(Ds,separator=",")[1:-1]
+        #params.loc['BC_Area_curve','val'] = np.array2string(As,separator=",")[1:-1]
+        #params.loc['BC_Volume_Curve','val'] = np.array2string(Vs,separator=",")[1:-1]
     
     #Raise underdrain invert to halfway up - not accounting for pipe diameter
     if scenario_dict['hpipe'] == True:  
@@ -123,7 +126,8 @@ frequencies = ['2yr','10yr','100yr','200yr']
 #Next, we will define the function that will run the model.
 def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     #First, we will define the timeseries based on the duration. Probably better to put this i/o step out of the loop but w/e
-    timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
+    #timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms.xlsx',sheet_name=dur_freq[0])
+    timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_IDFstorms_old.xlsx',sheet_name=dur_freq[0])
     #Test if no underdrain - has to be after timeseries is imported.
     if params.loc['fvalveopen','val'] != None:
         timeseries.loc[timeseries.time>0,'fvalveopen'] = params.loc['fvalveopen','val']
@@ -141,14 +145,45 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     bc = BCBlues(locsumm,chemsumm,params,timeseries,numc)
     #Next, run the model!
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
-    flow_time = flow_time[flow_time.time>=0]
-    model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
+    #Check if the system has drained. If not, re-run with more time
+    lastt = flow_time.index.max()[0]
+    #Check if the system has drained. If not, we will extend to make sure that it has. 
+    ramp = np.array([1/60,1/60]) # np.array([0.25,10/60,5/60,2/60,2/60,1/60])
+    rampstep = len(ramp)-1
+    while flow_time.loc[(lastt,'drain_pores'),'Depth'] > 2*params.val.hpipe:
+        flow_time = flow_time[flow_time.time>=0]
+        #Calculate the drain rate in m/hr
+        drainrate = max(1e-6,(flow_time.loc[(lastt-60,'drain_pores'),'Depth'] - flow_time.loc[(lastt,'drain_pores'),'Depth']))/ramp[rampstep]
+        #Max double
+        n_extend = min(flow_time.index[-1][0]-flow_time.index[0][0],
+                        3*int(np.ceil((flow_time.loc[(lastt,'drain_pores'),'Depth']/drainrate)/ramp[rampstep]))) #hr
+        #Extend
+        timeseries = timeseries.append(timeseries.iloc[0:n_extend]).reset_index(drop=True)
+        timeseries.loc[lastt+1:,'time'] = ramp[rampstep]
+        timeseries.loc[lastt+1:,'time'] = timeseries.loc[lastt+1:,'time'].cumsum()+timeseries.loc[lastt,'time']
+        #Just copy the last cell over
+        timeseries.iloc[lastt+1:,1:] = timeseries.iloc[lastt,1:]
+        lastt = timeseries.index.max()
+        flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
+        #Next time, go a little longert between steps
+        rampstep = max(0,rampstep-1)
+    mask = timeseries.time>=0
+    minslice = np.min(np.where(mask))
+    maxslice = np.max(np.where(mask))#minslice + 5 #
+    flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
+    draintimes = bc.draintimes(timeseries,flow_time)
+    #Error checking - output flowtime
+    #outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    #outname = 'flowtime_EngDesign_lowKn'+'_'.join(dur_freq)+'.pkl' 
+    #flow_time.to_pickle(outpath+outname)
+    model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time=flow_time)
+    #model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
     #model_outs = bc.run_it(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time = flow_time)
     mass_flux = bc.mass_flux(model_outs,numc) #Run to get mass flux
     denom = mass_flux.N_influent.groupby(level=0).sum()
     #Finally, we will get the model outputs we want to track.
     res = pd.DataFrame(index = chemsumm.index,columns= ['Duration','Frequency','pct_advected','pct_transformed','pct_sorbed','pct_overflow','pct_stormsewer'])
-    lastt = max(model_outs.index.levels[1])
+    #lastt = max(model_outs.index.levels[1])
     res.loc[:,'Duration'] = dur_freq[0]
     res.loc[:,'Frequency'] = dur_freq[1]
     
@@ -182,6 +217,7 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
                                     /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'].sum())
     res.loc[:,'pct_Qdrain'] = np.array(model_outs.loc[(slice(None),slice(None),numx-1),'Qout'].sum())\
                                     /np.array(model_outs.loc[(slice(None),slice(None),numx),'Qin'].sum())
+    res.loc[:,'draintime'] = np.max(draintimes)
     #dV = model_outs.loc[('6PPDQ',546,slice(0,numx-1)),'Vwater'].sum() - model_outs.loc[('6PPDQ',246,slice(0,numx-1)),'Vwater'].sum()
     # watbal = (dt*model_outs.loc[('6PPDQ',slice(None),numx),'Qin']).sum() - np.array((dt*model_outs.loc[('6PPDQ',slice(None),numx),'advpond']).sum()) \
     #     -np.array((dt*model_outs.loc[('6PPDQ',slice(None),slice(None)),'Qwaterexf']).sum()) \
@@ -244,7 +280,7 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
     filtered = [k for k,v in scenario_dict.items() if v == True]
     outname = 'wateryear_'+'_'.join(filtered)+'.pkl'
     model_outs.to_pickle(outpath+outname)
-    return 
+    return model_outs
 
 
 
@@ -257,11 +293,12 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
 #combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
 #combos = list(itertools.product([0,1],repeat=8))
-#combos = ((0,0,0,0,0,0,0),(1,0,0,0,0,0,0),(0,1,0,0,0,0,0),(0,0,1,0,0,0,0),(0,0,0,1,0,0,0),(0,0,0,0,1,0,0),(0,0,0,0,0,1,0),(0,0,0,0,0,0,1))#,
+#combos = ((0,0,0,0,0,0,0,0,0),(1,0,0,0,0,0,0,0),(0,1,0,0,0,0,0,0),(0,0,1,0,0,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,1,0,0,0),
+#          (0,0,0,0,0,1,0,0),(0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1))
 #          #(1,1,0,0,1,1),(1,1,0,0,0,1))
-combos = ((0,0,0,0,0,0,0,0),)#,((1,1,0,0,1,1,0),(1,1,1,0,0,1,0))#(0,1,0,0,0,0),(0,0,1,0,0,0),(0,0,0,1,0,0),(0,0,0,0,1,0),(0,0,0,0,0,1),)
+combos = ((1,0,0,0,0,0,0,0),)
 #pdb.set_trace()
-runwateryear = True
+runwateryear = False
 if runwateryear == True:
     n_jobs = (joblib.cpu_count()-2)#len(combos)
     timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_wateryear.xlsx')
@@ -287,8 +324,8 @@ else:
             
         outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
         filtered = [k for k,v in scenario_dict.items() if v == True]
-        outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
-        #outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
+        #outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
+        outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
         #if outname in os.listdir(outpath):
@@ -301,10 +338,11 @@ else:
         #scenario_dict[scenario] = True
         locsumm_test, params_test = design_tests(scenario_dict)
         #pdb.set_trace()
-        #chemsumm = chemsumm.loc['6PPDQ']
-        # for dur_freq in dur_freqs:
-        #     dur_freq = dur_freqs[2]
+        #chemsumm = chemsumm.loc['6PPDQ'] 
+        # for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
+        #     dur_freq = dur_freqs[2]#dur_freqs[23]
         #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        #"""
         res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
         #codetime = time.time()-tstart
         res = pd.concat(res)
@@ -318,5 +356,6 @@ else:
         #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
         
         res.to_pickle(outpath+outname)
+        #"""
     #scenario_dict[scenario] = False
 #'''

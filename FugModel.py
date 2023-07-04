@@ -548,6 +548,8 @@ class FugModel(metaclass=ABCMeta):
             #flow out
             res.loc[res.dmd,'M_star']  = res.loc[res.dmd,'M_i'] \
             +np.array(res.loc[res.dmn,'M_n'] - res.loc[res.dmn,'M_xf'])
+            #20230628 - Adding capillary flow from this cell to the one above
+            
             #- np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))#This line is advective mass out. -explicit.
         #    - np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*(res.loc[res.dmd,'Qwaterexf']+res.loc[res.dmd,'Qout'])))
         #res.loc[:,'M_star'].sum()/(res.loc[:,'M_i'].sum()-np.array(dt*(res.loc[res.dmd,'a1_t']*res.loc[res.dmd,'Z1']*res.loc[res.dmd,'Qout']))) #Code to check if the mass from the advection step balances
@@ -647,7 +649,11 @@ class FugModel(metaclass=ABCMeta):
             for k in range(0,len(numc)): #k is the column index
                 if (j == k): 
                     if j == 0:#Skip DT1 as it is in the m value
-                        pass            
+                        try:
+                            #2023-06-28 added capillary from drain below to last water cell above
+                            mat[:,m_vals[0:numx-1]+j,b_vals+j] = dt * np.array(res.loc[res.dm,'D_cap'].shift(-1)).reshape(numchems,numx)[:,slice(0,numx-1)]
+                        except KeyError:  
+                            pass            
                     else: #Otherwise, place the DT values in the matrix
                         D_val, D_valm, V_val, Z_val = 'DT' + str(k+1),'DTm' + str(k+1), 'V' + str(k+1), 'Z' + str(k+1)
                         #Modify DT to reflect the differential equation
@@ -749,6 +755,7 @@ class FugModel(metaclass=ABCMeta):
                 pdb.set_trace()
                 #xxx = 'poop'
                 #On error, exit.
+                print('Negative activity error at '+str(res.time[0]))
                 sys.exit('Negative activity error at '+str(res.time[0]))
             
         #xxx = 1
