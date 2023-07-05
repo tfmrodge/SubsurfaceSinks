@@ -957,7 +957,11 @@ class BCBlues(SubsurfaceSinks):
         zerodepths = ponddata.loc[mask,'time']
         #zerodepths = timeseries.iloc[np.where(res_time.loc[(slice(None),'pond'),'Depth'] == 0.)].time
         zerodepths = zerodepths[zerodepths>0]
-        draintimes = (zerodepths - zerodepths.shift(1))
+        #draintimes = (zerodepths - zerodepths.shift(1))
+        peakdepthtime = ponddata.loc[ponddata.Depth==np.max(ponddata.Depth),'time'].values[-1]#In case of multiple take last
+        nextzero = zerodepths.iloc[np.searchsorted(zerodepths,peakdepthtime)]
+        draintime = nextzero - peakdepthtime
+        
         # draintimes = []
         # drainidx = []
         #pdb.set_trace()
@@ -972,7 +976,7 @@ class BCBlues(SubsurfaceSinks):
         #         draintimes.append(zerodepths[idx] - timeseries.loc[maxDind,'time'])
         #         drainidx.append(idx) 
         
-        return draintimes #, drainidx   
+        return draintime #, drainidx   
             
     def BC_fig(self,numc,mass_balance,time=None,compound=None,figname='BC_Model_Figure.tif',dpi=100,fontsize=8,figheight=6,dM_locs=None,M_locs=None):
             """ 
