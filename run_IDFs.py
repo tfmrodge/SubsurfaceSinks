@@ -173,9 +173,9 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
     draintimes = bc.draintimes(timeseries,flow_time)
     #Error checking - output flowtime
-    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
-    outname = 'flowtime_EngDesign_lowKn'+'_'.join(dur_freq)+'.pkl' 
-    flow_time.to_pickle(outpath+outname)
+    #outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    #outname = 'flowtime_EngDesign_lowKn'+'_'.join(dur_freq)+'.pkl' 
+    #flow_time.to_pickle(outpath+outname)
     model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time=flow_time)
     #model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
     #model_outs = bc.run_it(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time = flow_time)
@@ -293,11 +293,11 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
 #combos = ((0,0,0,0,0,0),(1,0,0,0,0,0),(0,1,0,0,0,0))
 #combos = ((0, 0, 1, 0, 1, 0),)
 #all possible
-#combos = list(itertools.product([0,1],repeat=8))
+combos = list(itertools.product([0,1],repeat=8))
 #combos = ((0,0,0,0,0,0,0,0,0),(1,0,0,0,0,0,0,0),(0,1,0,0,0,0,0,0),(0,0,1,0,0,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,1,0,0,0),
 #          (0,0,0,0,0,1,0,0),(0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1))
 #          #(1,1,0,0,1,1),(1,1,0,0,0,1))
-combos = ((1,0,0,0,0,0,0,0),)
+#combos = ((0,0,0,0,0,0,0,0),)
 #pdb.set_trace()
 runwateryear = False
 if runwateryear == True:
@@ -341,8 +341,8 @@ else:
         #pdb.set_trace()
         #chemsumm = chemsumm.loc['6PPDQ'] 
         #for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
-        dur_freq = dur_freqs[2]#dur_freqs[23]
-        res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        # dur_freq = dur_freqs[2]#dur_freqs[23]
+        # res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
         #"""
         res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
         #codetime = time.time()-tstart
