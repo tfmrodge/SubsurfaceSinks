@@ -45,7 +45,7 @@ def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
     params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
-    params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
+    #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -173,13 +173,14 @@ def run_IDFs(locsumm,chemsumm,params,numc,Cin,dur_freq):
     flow_time = df_sliced_index(flow_time.loc[(slice(minslice,maxslice),slice(None)),:])
     draintimes = bc.draintimes(timeseries,flow_time)
     #Error checking - output flowtime
-    #outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
-    #outname = 'flowtime_EngDesign_lowKn'+'_'.join(dur_freq)+'.pkl' 
-    #flow_time.to_pickle(outpath+outname)
+    outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
+    outname = 'flowtime_EngDesign_lowKn'+'_'.join(dur_freq)+'.pkl' 
+    flow_time.to_pickle(outpath+outname)
     model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time=flow_time)
     #model_outs = bc.run_BC(locsumm,chemsumm,timeseries,numc,params,pp=None)
     #model_outs = bc.run_it(locsumm,chemsumm,timeseries,numc,params,pp=None,flow_time = flow_time)
     mass_flux = bc.mass_flux(model_outs,numc) #Run to get mass flux
+    #mbal = bc.mass_balance(model_outs,numc,mass_flux=mass_flux,normalized=True)
     denom = mass_flux.N_influent.groupby(level=0).sum()
     #Finally, we will get the model outputs we want to track.
     res = pd.DataFrame(index = chemsumm.index,columns= ['Duration','Frequency','pct_advected','pct_transformed','pct_sorbed','pct_overflow','pct_stormsewer'])
@@ -276,7 +277,7 @@ def run_wateryears(locsumm,chemsumm,params,numc,timeseries,combo):
     #Next, run the model!
     #flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)
     model_outs = bc.run_BC(locsumm_test,chemsumm,timeseries_test,numc,params_test,pp=None)
-    outpath = 'C:/Users/trodge01/Documents/BigPickles/'
+    outpath = 'D:/Users/trodge01/Documents/BigPickles/'
     filtered = [k for k,v in scenario_dict.items() if v == True]
     outname = 'wateryear_'+'_'.join(filtered)+'.pkl'
     model_outs.to_pickle(outpath+outname)
@@ -324,8 +325,8 @@ else:
             
         outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
         filtered = [k for k,v in scenario_dict.items() if v == True]
-        #outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
-        outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
+        outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
+        #outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
         #if outname in os.listdir(outpath):
@@ -339,9 +340,9 @@ else:
         locsumm_test, params_test = design_tests(scenario_dict)
         #pdb.set_trace()
         #chemsumm = chemsumm.loc['6PPDQ'] 
-        # for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
-        #     dur_freq = dur_freqs[2]#dur_freqs[23]
-        #     res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        #for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
+        dur_freq = dur_freqs[2]#dur_freqs[23]
+        res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
         #"""
         res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
         #codetime = time.time()-tstart
