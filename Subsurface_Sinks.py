@@ -444,7 +444,7 @@ class SubsurfaceSinks(FugModel):
                                 res.loc[(slice(None),slice(None),draincell),'D_cap'] = \
                                     res.loc[(slice(None),slice(None),draincell),'Qcap']\
                                         *res.loc[(slice(None),slice(None),draincell),'Zw_water']
-                                        
+                                #res.loc[(slice(None),slice(None),draincell),'D_cap'] = 0.        
                                 #res.loc[(slice(None),slice(None),draincell-1),'D_drainwater'] = res.loc[(slice(None),slice(None),draincell),'D_drainwater']
                             except KeyError:
                                 pass
@@ -1004,6 +1004,7 @@ class SubsurfaceSinks(FugModel):
             mass_flux.loc[:,Nadvj] = (res_time.loc[:,Dadvj] * res_time.loc[:,a_val])#Advective mass out.
             if j == 'water': #Water compartment, exfiltration losses
                 mass_flux.loc[:,'N_exf'] = (res_time.loc[:,'D_waterexf'] * res_time.loc[:,a_val])#Exfiltration mass loss
+                mass_flux.loc[:,'N_cap'] = (res_time.loc[:,'D_cap'] * res_time.loc[:,a_val])#Exfiltration mass loss
             elif j in ['rootbody','rootxylem','rootcyl','shoots']:
                 #Growth dilution processes - in DT but nowhere else.
                 Nrg_j,D_rgj = "Ng_"+str(j),"D_g"+str(j)

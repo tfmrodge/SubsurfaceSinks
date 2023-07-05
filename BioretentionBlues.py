@@ -247,8 +247,8 @@ class BCBlues(SubsurfaceSinks):
         #2022-10-11 since all flows are spread among all cells, this is true
         res.loc[(slice(None),slice(numx-1)),'V1'] = pd.DataFrame(np.array(timeseries.loc[(slice(None),'water'),'V']/numx),
                      index=res.index.levels[0]).reindex(res.index,level=0)[0]
-        #2023-06-28 - need to add Qcap into final cell
-        res.loc[(slice(None),numx-1),'V1'] +=  np.array(res.loc[(slice(None),numx),'Qcap'])* np.array(dt)
+        #2023-06-28 - need to add Qcap into final cell - 2023-07-04 - No we don't this is already done.
+        #res.loc[(slice(None),numx-1),'V1'] +=  np.array(res.loc[(slice(None),numx),'Qcap'])* np.array(dt)
         
         '''2022-10-11 Removed as it was equivalent to above expression for current set-up
         #Matrix solution to volumes. Changed from running through each t to running through each x, hopefully faster.

@@ -651,7 +651,8 @@ class FugModel(metaclass=ABCMeta):
                     if j == 0:#Skip DT1 as it is in the m value
                         try:
                             #2023-06-28 added capillary from drain below to last water cell above
-                            mat[:,m_vals[0:numx-1]+j,b_vals+j] = dt * np.array(res.loc[res.dm,'D_cap'].shift(-1)).reshape(numchems,numx)[:,slice(0,numx-1)]
+                            #mat[:,m_vals[0:numx-1]+j,b_vals+j] = dt * np.array(res.loc[res.dm,'D_cap'].shift(-1)).reshape(numchems,numx)[:,slice(0,numx-1)]
+                            mat[:,max(m_vals[0:numx-1]+j),max(b_vals+j)] = dt*np.array(res.loc[(slice(None),slice(None),numx-1),'D_cap'])
                         except KeyError:  
                             pass            
                     else: #Otherwise, place the DT values in the matrix
