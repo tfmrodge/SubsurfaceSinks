@@ -45,7 +45,7 @@ def design_tests(scenario_dict):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
     params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
-    #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
+    params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -325,12 +325,12 @@ else:
             
         outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
         filtered = [k for k,v in scenario_dict.items() if v == True]
-        outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
-        #outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
+        #outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
+        outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
-        #if outname in os.listdir(outpath):
-        #    continue #Skip if already done
+        if outname in os.listdir(outpath):
+            continue #Skip if already done
         if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
             continue #Mutually exclusive
         #if (scenario_dict['amend'] != True):
