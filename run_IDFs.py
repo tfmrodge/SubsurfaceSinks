@@ -26,7 +26,7 @@ from warnings import simplefilter
 simplefilter(action="ignore", category= FutureWarning)
 #Testing the modelres
 #Load parameterization files 
-pdb.set_trace()
+#pdb.set_trace()
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 tstart = time.time()
 #For the vancouver tree trench, no ponding z`one. 
@@ -41,11 +41,12 @@ params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
 #Design Tests
-def design_tests(scenario_dict):
+def design_tests(scenario_dict,slowdrain):
     #Re-initialize
     locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
     params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
-    params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
+    if slowdrain == True:
+        params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
     #Change underdrain valve opening (fvalve) (set to 0 for no underdrain flow)
     if scenario_dict['fvalve'] == True:  
         params.loc['fvalveopen','val'] = 0
@@ -297,7 +298,7 @@ combos = list(itertools.product([0,1],repeat=8))
 #combos = ((0,0,0,0,0,0,0,0,0),(1,0,0,0,0,0,0,0),(0,1,0,0,0,0,0,0),(0,0,1,0,0,0,0,0),(0,0,0,1,0,0,0,0),(0,0,0,0,1,0,0,0),
 #          (0,0,0,0,0,1,0,0),(0,0,0,0,0,0,1,0),(0,0,0,0,0,0,0,1))
 #          #(1,1,0,0,1,1),(1,1,0,0,0,1))
-#combos = ((0,0,0,0,0,0,0,0),)
+#combos = ((1, 1, 0, 0, 1, 0, 0, 1),)
 #pdb.set_trace()
 runwateryear = False
 if runwateryear == True:
@@ -317,46 +318,51 @@ else:
     #Set up loop through scenarios
     #scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
     #                 'Asys':False, 'Hp':False, 'hpipe':False}
-    for combo in combos:
-        scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
-                         'Asys':False, 'Hp':False, 'hpipe':False, 'amend':False}
-        for ind, param in enumerate(scenario_dict):        
-            scenario_dict[param] = bool(combo[ind])
+    #combos.reverse()
+    slowdrains = [False,True]
+    for slowdrain in slowdrains:
+        for combo in combos:
+            scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
+                            'Asys':False, 'Hp':False, 'hpipe':False, 'amend':False}
+            for ind, param in enumerate(scenario_dict):        
+                scenario_dict[param] = bool(combo[ind])
+                
+            outpath = '/home/tfmrodge/scratch/bcdesign/pickles/IDFouts/'
+            filtered = [k for k,v in scenario_dict.items() if v == True]
+            if slowdrain == True:
+                outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
+            else:
+                outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
+            #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
+            #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
+            if outname in os.listdir(outpath):
+                continue #Skip if already done
+            if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
+                continue #Mutually exclusive
+            #if (scenario_dict['amend'] != True):
+            #    continue
+        #for scenario in scenario_dict:
+            #scenario_dict[scenario] = True
+            locsumm_test, params_test = design_tests(scenario_dict)
+            #pdb.set_trace()
+            #chemsumm = chemsumm.loc['6PPDQ'] 
+            #for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
+            # dur_freq = dur_freqs[2]#dur_freqs[23]
+            # res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+            #"""
+            res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
+            #codetime = time.time()-tstart
+            res = pd.concat(res)
+            #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
+            #res = res.loc['6PPDQ',:]
+            res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
+            res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
+            for compound in chemsumm.index:
+                res.loc[compound,'Intensity'] = intensities
+            res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
+            #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
             
-        outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
-        filtered = [k for k,v in scenario_dict.items() if v == True]
-        #outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
-        outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
-        #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
-        #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
-        if outname in os.listdir(outpath):
-            continue #Skip if already done
-        if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
-            continue #Mutually exclusive
-        #if (scenario_dict['amend'] != True):
-        #    continue
-    #for scenario in scenario_dict:
-        #scenario_dict[scenario] = True
-        locsumm_test, params_test = design_tests(scenario_dict)
-        #pdb.set_trace()
-        #chemsumm = chemsumm.loc['6PPDQ'] 
-        #for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
-        # dur_freq = dur_freqs[2]#dur_freqs[23]
-        # res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
-        #"""
-        res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
-        #codetime = time.time()-tstart
-        res = pd.concat(res)
-        #For now, just get rid of bromide. Need to make so that it can run one compound but honestly doesn't add that much time
-        #res = res.loc['6PPDQ',:]
-        res.loc[:,'dur_num'] = res.loc[:,'Duration'].replace(dur_dict)
-        res.loc[:,'LogD'] = np.log10(res.loc[:,'dur_num'])
-        for compound in chemsumm.index:
-            res.loc[compound,'Intensity'] = intensities
-        res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
-        #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
-        
-        res.to_pickle(outpath+outname)
+            res.to_pickle(outpath+outname)
         #"""
     #scenario_dict[scenario] = False
 #'''
