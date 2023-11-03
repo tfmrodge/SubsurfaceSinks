@@ -36,7 +36,7 @@ numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','p
 locsumm = pd.read_excel('inputfiles/Pine8th/Pine8th_BC.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Pine8th/PPD_CHEMSUMM.xlsx',index_col = 0)
 #chemsumm = pd.read_excel('inputfiles/Pine8th/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
+chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM2.xlsx',index_col = 0)
 params = pd.read_excel('inputfiles/Pine8th/params_Pine8th.xlsx',index_col = 0)
 #params.loc['Kn','val'] = 3.3e-3 #Median value for silty-clayey soil in S. Ontario, good low-permeability number
 
@@ -317,7 +317,8 @@ else:
     #Set up loop through scenarios
     #scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
     #                 'Asys':False, 'Hp':False, 'hpipe':False}
-    for combo in combos:
+    combos.reverse()
+    for combo in combos: #combos.reverse(): #
         scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
                          'Asys':False, 'Hp':False, 'hpipe':False, 'amend':False}
         for ind, param in enumerate(scenario_dict):        
@@ -325,12 +326,12 @@ else:
             
         outpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/IDFouts/'
         filtered = [k for k,v in scenario_dict.items() if v == True]
-        outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
-        #outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
+        #outname = 'IDF_EngDesign'+'_'.join(filtered)+'.pkl'
+        outname = 'IDF_EngDesign_lowKn'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
         #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
-        #if outname in os.listdir(outpath):
-        #    continue #Skip if already done
+        # if outname in os.listdir(outpath):
+        #     continue #Skip if already done
         if (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
             continue #Mutually exclusive
         #if (scenario_dict['amend'] != True):
@@ -341,8 +342,8 @@ else:
         #pdb.set_trace()
         #chemsumm = chemsumm.loc['6PPDQ'] 
         #for dur_freq in dur_freqs: #Failed larger than 12hrs? Unclear why - flow changes didn't seem to work
-        # dur_freq = dur_freqs[2]#dur_freqs[23]
-        # res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
+        #dur_freq = dur_freqs[2]#dur_freqs[23]
+        #res = run_IDFs(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq)
         #"""
         res = Parallel(n_jobs=n_jobs)(delayed(run_IDFs)(locsumm_test,chemsumm,params_test,numc,Cin,dur_freq) for dur_freq in dur_freqs)
         #codetime = time.time()-tstart
@@ -356,7 +357,7 @@ else:
         res.loc[:,'LogI'] = np.log10(res.loc[:,'Intensity'])
         #bc.plot_flows(flow_time,Qmeas = timeseries.Qout_meas,compartments=['drain','water'],yvar='Q_out')
         
-        res.to_pickle(outpath+outname)
+        #res.to_pickle(outpath+outname)
         #"""
     #scenario_dict[scenario] = False
 #'''
