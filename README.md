@@ -24,8 +24,7 @@ The models are built as class objects. To get information on the class methods, 
 ## BioretentionBlues
 Currently implemented with the BioretentionBlues subclass, which is parameterized for a bioretention cell as per Rodgers et al (2022). Read the paper here https://doi.org/10.1021/acs.est.1c07555
 
-You can also run the BioretentionBlues subclass as parameterized for the Pine and 8th st system in Vancouver, Canada as presented in Rodgers et al. (in prep).
-For this work, we introduced a few new capabilities, including the ability to run the model across intensity-duration-frequency curves. These are currently defined for the City of Vancouver, running them efficiently uses the joblib parallelization package which can be found here: https://joblib.readthedocs.io/en/latest/
+You can also run the BioretentionBlues subclass as parameterized for the Pine and 8th st system in Vancouver, Canada as presented in Rodgers and Wang et al. (2023). Read that paper and the updates to the model hereL https://pubs.acs.org/doi/10.1021:/acs.estlett.3c00203. For this work, we introduced a few new capabilities, including the ability to run the model across intensity-duration-frequency curves. These are currently defined for the City of Vancouver, running them efficiently uses the joblib parallelization package which can be found here: https://joblib.readthedocs.io/en/latest/
 
 ## WastewaterWetland
 Implementation for a subsurface flow wastewater treatment wetland. Currently paramterized for the Oro Loma Horizontal Levee system in San Leandro, California.
