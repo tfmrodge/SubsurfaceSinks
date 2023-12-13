@@ -42,9 +42,9 @@ if totalt <= len(timeseries):
     timeseries = timeseries[0:totalt+1]
 else:
     while math.ceil(totalt/len(timeseries)) > 2.0:
-        timeseries = timeseries.append(timeseries)
+        timeseries = pd.concat([timeseries,timeseries]) #20231110 removing deprecated append
     totalt = totalt - len(timeseries)
-    timeseries = timeseries.append(timeseries[0:totalt])
+    timeseries = pd.concat([timeseries,timeseries[0:totalt]])
     timeseries.loc[:,'time'] = np.arange(1,len(timeseries)+1,timeseries.time.iloc[1]-timeseries.time.iloc[0])
     timeseries.index = range(len(timeseries))
     

@@ -362,8 +362,9 @@ class FugModel(metaclass=ABCMeta):
         #Do a final iteration for remaining NaNs & 0s
         delrb_test[delrb_test==0] = dt - delb_test1
         delrf_test[delrf_test==0] = dt - delf_test1
-        xb_test1[np.isnan(xb_test1)] = xb_test + delrb_test * res.groupby(level = 0)['v1'].shift(dels+1)
-        xf_test1[np.isnan(xf_test1)] = xf_test + delrf_test * res.groupby(level = 0)['v1'].shift(dels)
+        #TR 20231114 - replacing np.isnan with pd.isnull()
+        xb_test1[pd.isnull(xb_test1)] = xb_test + delrb_test * res.groupby(level = 0)['v1'].shift(dels+1)
+        xf_test1[pd.isnull(xf_test1)] = xf_test + delrf_test * res.groupby(level = 0)['v1'].shift(dels)
         #Set those which don't cross a full cell
         xb_test1[res.groupby(level = 0)['del_0'].shift(1)>=dt] = res.groupby(level = 0)['v1'].shift(1)*dt
         xf_test1[res.del_0>=dt] = res.v1*dt

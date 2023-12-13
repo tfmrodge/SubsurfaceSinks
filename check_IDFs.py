@@ -20,6 +20,7 @@ combos = list(itertools.product([0,1],repeat=8))
 #          #(1,1,0,0,1,1),(1,1,0,0,0,1))
 #combos = ((0,0,0,0,0,0,0,0),)
 #pdb.set_trace()
+sum=0
 for combo in combos:
     scenario_dict = {'fvalve': False, 'Foc': False, 'Kinf':False, 'Dsys':False, 
                         'Asys':False, 'Hp':False, 'hpipe':False, 'amend':False}
@@ -33,9 +34,10 @@ for combo in combos:
     #outname = 'IDF_'+'_'.join(filtered)+'.pkl'
     #outname = 'IDF_lowKn'+'_'.join(filtered)+'.pkl'
     if outname in os.listdir(outpath):
-        continue #Skip if already done
+        sum+=1 #Skip if already done
     elif (scenario_dict['fvalve'] == True) & (scenario_dict['hpipe'] ==True):
         continue #Mutually exclusive
     else:
         print(outname,combo)
+print('Done '+str(sum) +' combinations')
 
