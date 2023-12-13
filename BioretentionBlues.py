@@ -91,9 +91,12 @@ class BCBlues(SubsurfaceSinks):
         res.loc[len(res.index),'x'] = L + locsumm.loc['drain','Depth']/2
         res.loc[:,'dx'] = dx
         res.loc[len(res.index)-1,'dx'] = locsumm.loc['drain','Depth']
-
+        
+        #20231110 updated for new pandas version which got rid of append. 
         if len(numc) > 2: #Don't worry about this for the 2-compartment version
-            res = res.append(pd.DataFrame([999],columns = ['x']), ignore_index=True) #Add a final x for those that aren't discretized
+            #res2 = res.append(pd.DataFrame([999],columns = ['x']), ignore_index=True) #Add a final x for those that aren't discretized
+            res.loc[len(res.index),'x'] = 999
+            #res2 = pd.concat([res,pd.DataFrame([999],columns = ['x'])])
 
         #Then, we put the times in by reindexing. Updated from old loop 20220111
         resind = [timeseries.index.levels[0],res.index]

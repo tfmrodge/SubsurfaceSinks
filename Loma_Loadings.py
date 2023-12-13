@@ -61,7 +61,8 @@ class LomaLoadings(SubsurfaceSinks):
             res = pd.DataFrame(np.arange(0.0+dx_in/2.0,L/10.0,dx_in),columns = ['dx'])
             res = pd.DataFrame(np.arange(0.0+dx_in/2.0,L/10.0,dx_in),columns = ['x'])
             lenin = len(res) #Length of the dataframe at the inlet resolution
-            res = res.append(pd.DataFrame(np.arange(res.iloc[-1,0]+dx_in/2+dx/2,L,dx),columns = ['x']))
+            #res = res.append(pd.DataFrame(np.arange(res.iloc[-1,0]+dx_in/2+dx/2,L,dx),columns = ['x']))
+            res = pd.concat([(pd.DataFrame(np.arange(res.iloc[-1,0]+dx_in/2+dx/2,L,dx),columns = ['x']))])
             res = pd.DataFrame(np.array(res),columns = ['x'])
             res.loc[0:lenin-1,'dx'] = dx_in
             res.loc[lenin:,'dx'] = dx
