@@ -1194,9 +1194,9 @@ class SubsurfaceSinks(FugModel):
                                           index = res_time.index.levels[1],columns=['time'])
         try: #If there are measured and estimated flows, bring both in
             Couts.loc[:,'Qout_meas'] = timeseries.loc[:,'Qout_meas']
-            Couts.loc[:,'Qout'] = np.array(res_time.loc[(min(res_time.index.levels[0]),slice(None),numx-1),'Qout'])
         except KeyError:
             pass
+        Couts.loc[:,'Qout'] = np.array(res_time.loc[(min(res_time.index.levels[0]),slice(None),numx-1),'Qout'])
             #Couts.loc[:,'Qout'] = timeseries.loc[:,'Qout']
         for chem in mass_flux.index.levels[0]:
             try: #If there are measurements
