@@ -57,10 +57,10 @@ timeseries = pd.read_excel('inputfiles/Pine8th/timeseries_Pine8th.xlsx')
 # timeseries.loc[:,'RainRate'] = timeseries.loc[:,dur_freq[1] + '_RainRate']
 
 
-Cin = 1000 #ng/L
-for compound in chemsumm.index:
-    minname = compound+'_Min'
-    timeseries.loc[:,minname] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
+# Cin = 1000 #ng/L
+# for compound in chemsumm.index:
+#     minname = compound+'_Min'
+#     timeseries.loc[:,minname] = timeseries.Qin*Cin*1/60 #m3/hr * g/m3*hrs = g
 #Cin = Cin*1e-6 #Convert to g/m³
 #timeseries.loc[:,'6PPDQ_Min'] = timeseries.Qin*Cin*1/60 
 #timeseries = pd.read_excel('inputfiles/timeseries_Pine8th_short.xlsx')
@@ -169,7 +169,7 @@ for ind,chem in enumerate(chemsumm.index):
     except KeyError:
         pass
 codetime = time.time() - codetime
-plotfig = False
+plotfig = True
 if plotfig == True:
     #Calculate the masses
     mbal_cum = bc.mass_balance_cumulative(numc, mass_balance = mbal,normalized=True)
