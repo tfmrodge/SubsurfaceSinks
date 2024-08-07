@@ -68,9 +68,9 @@ class FugModel(metaclass=ABCMeta):
         pass
         
     def run_model(self,calctype='fss'):
-        if calctype is 'fss': #Peform forward steady-state calcs
+        if calctype == 'fss': #Peform forward steady-state calcs
             return self.forward_calc_ss(self.ic,self.numc)
-        elif calctype is 'bss': #Perform backward calcs with lair concentration as target and emissions location
+        elif calctype == 'bss': #Perform backward calcs with lair concentration as target and emissions location
             return self.backward_calc_ss(self.ic,self.numc)
         
     def forward_calc_ss(self,ic,num_compartments):
@@ -379,8 +379,10 @@ class FugModel(metaclass=ABCMeta):
         #mask = res.xb != res.groupby(level = 0)['xf'].shift(1)
         res.loc[:,'xb'] = res.groupby(level = 0)['xf'].shift(1)
         #Clean up the US boundary, anything NAN or < 0 comes from before the origin
-        maskb = (np.isnan(res.xb) | (res.xb < 0))
-        maskf = (np.isnan(res.xf)) | (res.xf < 0)
+        #maskb = (np.isnan(res.xb) | (res.xb < 0))
+        #maskf = (np.isnan(res.xf)) | (res.xf < 0)
+        maskb = (res.xb.isna()) | (res.xb < 0)
+        maskf = (res.xf.isna()) | (res.xf < 0)
         res.loc[maskb,'xb'] = 0
         res.loc[maskf,'xf'] = 0
 
@@ -403,7 +405,7 @@ class FugModel(metaclass=ABCMeta):
             #f = interp1d(xx,yy,kind='cubic',fill_value='extrapolate')
             f1 = interp1d(xx,yy,kind='linear',fill_value='extrapolate')#Linear interpolation where cubic fails
             #Determine mass at xf and xb
-            res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf']) 
+            res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf'].astype('float')) 
             #Check if the mass at the RHS of the cell is more than the mass in the cell, correct.
             res.loc[res.M_xf>res.M_n,'M_xf'] = res.loc[res.M_xf>res.M_n,'M_n']
             res.loc[(ii,slice(None),res.dm),'M_xb'] = res.loc[(ii,slice(None),res.dm),'M_xf'].shift(1)
@@ -415,7 +417,6 @@ class FugModel(metaclass=ABCMeta):
             #check if the cubic interpolation failed (<0), use linear in those places.
             mask = res.loc[(ii,slice(None),res.dm),'M_star'] < 0
             if sum(mask) == 0: #Override with linear to see if this is causing instability
-                YOMAMA = 'AWESOME'
                 pass 
             if sum(mask) != 0:
                 #pdb.set_trace()
@@ -423,9 +424,9 @@ class FugModel(metaclass=ABCMeta):
                 #res.loc[(chems, mask),'M_star'] = f1(res.loc[(chems,mask),'xf'])\
                 #- f1(res.loc[(chems, mask),'xb'])
                 #Replace everywhere
-                res.loc[(ii,slice(None),res.dm),'M_star'] = f1(res.loc[(ii,slice(None),res.dm),'xf'])\
+                res.loc[(ii,slice(None),res.dm),'M_star'] = f1(res.loc[(ii,slice(None),res.dm),'xf'].astype('float'))\
                 - f1(res.loc[(ii,slice(None),res.dm),'xb'])
-                res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf']) #Mass at xf, used to determine advection out of the system
+                res.loc[(ii,slice(None),res.dm),'M_xf'] = f1(res.loc[(ii,slice(None),res.dm),'xf'].astype('float')) #Mass at xf, used to determine advection out of the system
                 res.loc[(ii,slice(None),res.dm),'M_xb'] = res.loc[(ii,slice(None),res.dm),'M_xf'].shift(1)
         
         #US boundary conditions
@@ -725,7 +726,13 @@ class FugModel(metaclass=ABCMeta):
                     
         
         #Now, we will solve the matrix for each compound simultaneously (each D-matrix and input is stacked by compound)
+        #matsol = np.linalg.solve(mat,inp)
+        #20240807 - updated to add explicit shape as numpy update caused a size mismatch
+        inp = inp.reshape([numchems,numx*numc_disc+numc_bulk,1])
         matsol = np.linalg.solve(mat,inp)
+        matsol = matsol.reshape([numchems,numx*numc_disc+numc_bulk])
+        # for chem in numchems:
+        #     matsol = np.linalg.solve(mat[chem,:,:],inp[chem,:])
         #(matsol < 0).sum()
         #Error checking - Check solutions ~ inputs
         #np.dot(mat[0],matsol[0]) - inp[0]
