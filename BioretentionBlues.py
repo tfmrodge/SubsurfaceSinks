@@ -660,7 +660,7 @@ class BCBlues(SubsurfaceSinks):
                 try:
                     Snat = res.V['native_pores'] /(res.V['native_soil']*(res.Porosity['native_soil'])) 
                     Q10_exfds = 1/dt * ((1-Snat) * res.Porosity['native_soil']*res.V['native_soil'])
-                except IndexError:#If native soil not given, ignore it.
+                except KeyError:#If native soil not given, ignore it.
                     Q10_exfds = Q10_exfp
                 Qmaxdrainexf = max(min(Q10_exfp,Q10_exfds),0)
                 Q6_inf_ds = (res.V.drain*res.Porosity.drain - res.V[compartments[2]])/dt - min(Q6_infp,Q6_inf_us) + Qmaxpipe + Qmaxdrainexf            
