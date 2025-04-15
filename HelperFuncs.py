@@ -89,3 +89,84 @@ def find_nearest(array,value):
         return array[idx-1]
     else:
         return array[idx]
+def kinvisc(T):
+    #Calculate kinematic viscosity of water
+    # Temperature in °C
+    temps = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
+                      55, 60, 65, 70, 75, 80, 85, 90, 95, 100])
+    # Kinematic viscosity of water in m²/s (from CRC Handbook or IAPWS data)
+    kin_viscs = np.array([
+        1.787e-6, 1.519e-6, 1.308e-6, 1.139e-6, 1.004e-6,
+        0.902e-6, 0.801e-6, 0.729e-6, 0.658e-6, 0.607e-6,
+        0.553e-6, 0.514e-6, 0.475e-6, 0.445e-6, 0.415e-6,
+        0.392e-6, 0.368e-6, 0.350e-6, 0.331e-6, 0.312e-6,
+        0.294e-6])
+    nu = np.interp(T, temps, kin_viscs) #Assume constant T
+    return nu
+
+#Using the equation of Ferguson and Church (2004)
+#following the implementation shown at https://stormwaterbook.safl.umn.edu/other-resources/appendices/importance-particle-size-distribution-performance-sedimentation
+def particle_settling(psd,T,R=2.5,C1=18,C2=1.0):
+    #psd should be a 2D array where x is particle size (m), y  mass%
+    #v = gRd**2/(18*nu+(0.75*C*g*R*d**3)**1/2)
+    g = 9.80665#m/s2
+    nu = kinvisc(T)
+    #Then, calculate particle settling velocity for each particle size
+    psd_df = pd.DataFrame(psd,columns=['d','masspct'])
+    psd_df.loc[:,'vs']=(g*R*psd_df.d**2)/(C1*nu+(0.75*C2*g*R*psd_df.d**3)**(1/2))
+    return psd_df  
+
+#Orifice/weir flow
+def culvert_flow_est(
+        headwater_depth, #m, series or array, from channel bottom
+        tailwater_depth, #m, series or array, from channel bottom
+        diameter, #m, culvert diameter (assumes circular)
+        L_culvert,#m, culvert length
+        head_offset=0., #m, measured from channel bottom 
+        tail_offset=0., #m, measured from channel bottom
+        n_manning=0.011 #
+        ):
+    g = 9.80665 #m/s2
+    #Initialize res dataframe
+    res = pd.DataFrame(np.array([headwater_depth,tailwater_depth]).T,columns=['h_h','h_t'])
+    #Adjust heights for offsets of culvert inverts at head and tail
+    res.loc[:,'hh_adj'] = res.h_h-head_offset
+    res.loc[:,'ht_adj'] = res.h_t-tail_offset
+    
+    #Calculate flow area and wetted perimeter per https://support.tygron.com/wiki/Culvert_formula_(Water_Overlay)
+    res.loc[(res.hh_adj<diameter/2),'h']=res.hh_adj
+    res.loc[(res.hh_adj>=diameter/2),'h']=diameter-res.hh_adj
+    res.loc[(res.hh_adj>=diameter),'h']=0.0
+    res.loc[:,'theta']= 2 * np.arccos((diameter/2-res.h)/(diameter/2))
+    res.loc[(res.hh_adj<diameter/2),'area'] = 1/2*((diameter/2**2*(res.theta-np.sin(res.theta))))
+    res.loc[(res.hh_adj>=diameter/2),'area'] = np.pi*1/4/diameter**2-1/2*((diameter/2**2*(res.theta-np.sin(res.theta))))
+    res.loc[(res.hh_adj<diameter/2),'Pwet'] = (diameter/2)*res.theta
+    res.loc[(res.hh_adj>=diameter/2),'Pwet'] =2*np.pi*(diameter/2)-(diameter/2)*res.theta
+    res.loc[:,'R_h'] =res.area/res.Pwet #Hydraulic radius
+    #Determine flow regime and calculate discharged. Simplified from https://il.water.usgs.gov/proj/feq/fequtl98.i2h/4_7aupdate.html
+    #Calculate culvert loss correction factor
+    res.loc[:,'U'] = np.sqrt(1 / (1 + (2 * g * n_manning**2 * L_culvert) / res.R_h**(4/3)))
+    res.loc[:,'flow_direction'] = np.sign(res.hh_adj-res.ht_adj) #Flow direction
+    res.loc[:,'Q']=0.0 #m3/s. if depth < weir bottom (no flow)
+    #They calculate flow with the orifice equation anyway, so no transition. Could
+    #adjust U in the future to approach typical orifice values of e.g. 0.6
+    res.loc[(res.hh_adj>0.0),'Q']=res.area*res.U*np.sqrt(2 * g * abs(res.hh_adj-res.ht_adj)) * res.flow_direction
+    
+    # #Estimate weir coefficient using sharp-crested circular weir data
+    # #from Staus 1936 via Irzooki 2014 DOI 10.1007/s13369-014-1360-8s
+    # #Ratio of head to diameter
+    # H0_Ds = np.array([0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 
+    #                     0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00])
+    # Cds = np.array([0.750, 0.650, 0.623, 0.610, 0.604, 0.600, 0.597, 0.595, 0.594, 0.593,
+    #                       0.593, 0.594, 0.595, 0.596, 0.597, 0.599, 0.600, 0.602, 0.604, 0.606])
+    # res.loc[:,'H_D']=res.hh_adj/diameter #head over diameter
+    # res.loc[:,'Cd'] = np.interp(res.H_D, H0_Ds, Cds)
+    # #Free weir flow - outlet is free-fall, inlet is not submerged
+    # res.loc[(res.hh_adj<diameter) & (res.ht_adj<=0),'Q'] = res.Cd*diameter*res.hh_adj**1.5
+    # #Submerged weir flow
+    # res.loc[(res.hh_adj<diameter) & (res.ht_adj>0),'Q'] = res.Cd*diameter*res.hh_adj**1.5
+    # #Free Orifice flow
+    # res.loc[(res.hh_adj>=diameter) & (res.ht_adj<=diameter),'Q'] = Co*area*np.sqrt(2*g*res.hh_adj)
+    # #Submerged Orifice flow
+    # res.loc[(res.hh_adj>=diameter) & (res.ht_adj>diameter),'Q'] = Co*area*np.sqrt(2*g*(res.hh_adj-res.ht_adj))
+    return res.Q
