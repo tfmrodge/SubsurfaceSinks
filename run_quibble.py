@@ -12,12 +12,13 @@ import matplotlib.pyplot as plt
 #This is the name of the python module containing the Bioretention Blues submodel.
 from Stormpond import StormPond
 from inputfiles.QuibblePond.quibble_dimcalcs import quibble_dimcalc_tables
-from HelperFuncs import df_sliced_index
+from HelperFuncs import df_sliced_index, culvert_flow_est
 import pdb
 import time
 from hydroeval import kge #Kling-Gupta efficiency (Kling-Gupta et al., 2009)
 import hydroeval
 import ast
+from scipy import optimize
 #import ast
 #Testing the model
 pdb.set_trace()
@@ -40,7 +41,60 @@ locsumm = pd.read_excel('inputfiles/QuibblePond/Quibble_Pond.xlsx',sheet_name='L
 chemsumm = pd.read_excel('inputfiles/QuibblePond/6PPDQ_CHEMSUMM.xlsx',index_col = 0)
 pp = None
 timeseries = pd.read_excel('inputfiles/QuibblePond/timeseries_qbtest.xlsx')
-#"D:\Github\SubsurfaceSinks\inputfiles\QuibblePond\6PPDQ_CHEMSUMM.xlsx"
+#timeseries = pd.read_excel('inputfiles/QuibblePond/timeseries_qb_20241018.xlsx')
+#Logger offset from channel/pipe bottom
+timeseries.loc[:,'outlevel_m'] = timeseries.outlevel_m +(69.215-51.2)/100#Measured stage vs water surface 11:45 2025-03-20
+timeseries.loc[:,'inlevel_m'] = timeseries.outlevel_m +0.03 #Assumed value
+#For Qin, tailwater depth = outlevel +0.05 (higher by 0.05m at head than tail)
+timeseries.loc[:,'Qin'] = 3600*culvert_flow_est(
+        timeseries.inlevel_m, #m, series or array, from channel bottom
+        timeseries.outlevel_m-0.05, #m, series or array, from channel bottom
+        params.val.D_culvert_in, #m, culvert diameter (assumes circular)
+        params.val.L_culvert_in,#m, culvert length
+        head_offset=0., #m, measured from channel bottom 
+        tail_offset=0., #m, measured from channel bottom
+        n_manning=params.val.culvert_n)
+calc_Qout = False
+if calc_Qout==True:
+    #"D:\Github\SubsurfaceSinks\inputfiles\QuibblePond\6PPDQ_CHEMSUMM.xlsx"
+    def calibrate_QinQout(tailratio):
+        timeseries.loc[:,'Qin'] = culvert_flow_est(
+                timeseries.inlevel_m, #m, series or array, from channel bottom
+                timeseries.outlevel_m-0.05, #m, series or array, from channel bottom
+                params.val.D_culvert_in, #m, culvert diameter (assumes circular)
+                params.val.L_culvert_in,#m, culvert length
+                head_offset=0., #m, measured from channel bottom 
+                tail_offset=0., #m, measured from channel bottom
+                n_manning=params.val.culvert_n)
+        #For Qout, assume same ratio of tailwater depth as average across event
+        #tailratio = 0.5#(timeseries.outlevel_m/timeseries.inlevel_m).mean()
+        timeseries.loc[:,'Qout'] = culvert_flow_est(
+                timeseries.outlevel_m, #m, series or array, from channel bottom
+                timeseries.outlevel_m*tailratio, #m, series or array, from channel bottom
+                params.val.D_culvert_out, #m, culvert diameter (assumes circular)
+                params.val.L_culvert_out,#m, culvert length
+                head_offset=0., #m, measured from channel bottom 
+                tail_offset=0., #m, measured from channel bottom
+                n_manning=params.val.culvert_n)
+        minimizer = abs(timeseries.Qin.sum()-timeseries.Qout.sum())
+        return minimizer
+        #Assume across event that Qin=Qout. If outlet stage balances should be true
+    testtr=0.5
+    tailratio = optimize.newton(calibrate_QinQout,testtr,tol=1e-5)
+    
+    #For Qout, assume same ratio of tailwater depth as average across event
+    #tailratio = 0.5#(timeseries.outlevel_m/timeseries.inlevel_m).mean()
+    timeseries.loc[:,'Qout'] = 3600*culvert_flow_est(
+            timeseries.outlevel_m, #m, series or array, from channel bottom
+            timeseries.outlevel_m*tailratio, #m, series or array, from channel bottom
+            params.val.D_culvert_out, #m, culvert diameter (assumes circular)
+            params.val.L_culvert_out,#m, culvert length
+            head_offset=0., #m, measured from channel bottom 
+            tail_offset=0., #m, measured from channel bottom
+            n_manning=params.val.culvert_n)
+
+
+locsumm.loc['water','Depth'] = timeseries.outlevel_m[0]
 #Initialize the model
 qbl =  StormPond(locsumm,chemsumm,params,timeseries,numc)
 #Define dX
