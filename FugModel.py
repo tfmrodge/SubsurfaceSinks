@@ -399,7 +399,6 @@ class FugModel(metaclass=ABCMeta):
         #in order to get this to work.
         for ii in chems:
             #Added the zero at the front as M_n(0) = 0
-            
             xx = np.append(0,res.loc[(ii,slice(None),res.dm),'dx'].cumsum())#forward edge of each cell
             yy = np.append(0,res.loc[(ii,slice(None),res.dm),'M_n']) #Cumulative mass in the system
             #f = interp1d(xx,yy,kind='cubic',fill_value='extrapolate')
@@ -772,6 +771,126 @@ class FugModel(metaclass=ABCMeta):
         
         return res
 
+    #Assume particles only advect explicitly
+    #Same lagrangian scheme as the advection from the fugmodel 1d adre 
+    def advect_only_1d(self,res,params,dt,targets,bc_us):
+        '''
+        20250416 - duplication of ADRE_1D method for advection only for a single index and defined "targets"
+        res = results dataframe. Assumes single index, unlike advect_adre function!
+        param = parameters dataframe
+        targets = list of column names (str) in res with units that you want advected
+        bc_us = Upstream concentration-like unit of thing you want advected. bc_us*Q*dt = mass-like unit in
+        '''
+        outres = res.copy(deep=True)
+        res = res.copy(deep=True)
+        dm0 = res.index.min()#First cell
+        #Calculate time to cross each cell [T]
+        res.loc[:,'del_0']=res.dx/res.v1
+        res.loc[:,'c'] = res.v1*dt/res.dx #Courant number
+        #res.loc[:,'Pe'] = res.v1*res.dx/(res.disp) #Grid peclet number
+        #Initialize variables
+        #Time taken to traverse full cells for back packet
+        delb_test = pd.Series().reindex_like(res)
+        delb_test[:] = 0 #Set to 0
+        #delrb is the time remaining in the time step
+        delb_test1,delrb_test = delb_test.copy(deep=True),delb_test.copy(deep=True)
+        #Forward variables same as backwards 
+        delf_test,delf_test1,delrf_test = delb_test.copy(deep=True),delb_test.copy(deep=True),delb_test.copy(deep=True)
+        #Distance packets travel in time 
+        xb_test,xb_test1 = delb_test.copy(deep=True),delb_test.copy(deep=True)
+        xf_test,xf_test1 = delb_test.copy(deep=True),delb_test.copy(deep=True)
+        #Maximum number of cells any one packet goes through
+        maxcells = max(1,int(res.c.max()))
+        #This loop calculates the distance & time backwards that a water packet takes
+        for dels in range(maxcells):
+            #Time to traverse a full cell
+            delb_test += res['del_0'].shift(dels+1)
+            delf_test += res['del_0'].shift(dels)
+            #Calculate del_test1 only where a full spatial step is traversed
+            delb_test1[delb_test<=dt] = delb_test[delb_test<=dt]
+            delf_test1[delf_test<=dt] = delf_test[delf_test<=dt]
+            #Do the same thing in reverse for delrb_test, if delrb_test is zero to prevent overwriting
+            #Create a mask showing the cells that are finished
+            maskb = (delb_test>dt) & (delrb_test==0)
+            delrb_test[maskb] = dt - delb_test1 #Time remaining in the time step, back face
+            maskf = (delf_test>dt) & (delrf_test==0)
+            delrf_test[maskf] = dt - delf_test1 #Time remaining in the time step, forward face
+            #Using delrb_test and the velocity of the current cell, calculate  the total distance each face travels
+            xb_test1[maskb] = xb_test + delrb_test * res['v1'].shift(dels+1)
+            xf_test1[maskf] = xf_test + delrf_test * res['v1'].shift(dels)
+            #Then, update the "dumb" distance travelled
+            xb_test += res['dx'].shift(dels+1)
+            xf_test += res['dx'].shift(dels)
+        #Outside the loop, we clean up the boundaries and problem cases
+        #Do a final iteration for remaining NaNs & 0s
+        delrb_test[delrb_test==0] = dt - delb_test1
+        delrf_test[delrf_test==0] = dt - delf_test1
+        #TR 20231114 - replacing np.isnan with pd.isnull()
+        xb_test1[pd.isnull(xb_test1)] = xb_test + delrb_test * res['v1'].shift(dels+1)
+        xf_test1[pd.isnull(xf_test1)] = xf_test + delrf_test * res['v1'].shift(dels)
+        #Set those which don't cross a full cell
+        xb_test1[res['del_0'].shift(1)>=dt] = res['v1'].shift(1)*dt
+        xf_test1[res.del_0>=dt] = res.v1*dt
+        #If x = 0 it goes to the origin
+        xf_test1[xf_test1==0] = res.loc[xf_test1==0,'x']+res.loc[xf_test1==0,'dx']/2
+        xb_test1[xb_test1==0] = res.loc[xb_test1==0,'x']-res.loc[xb_test1==0,'dx']/2
+        #Bring what we need to res
+        res.loc[:,'xf'] = res.x + res.dx/2 - xf_test1
+        res.loc[:,'xb'] = res.xf.shift(1)
+        maskb = (res.xb.isna()) | (res.xb < 0)
+        maskf = (res.xf.isna()) | (res.xf < 0)
+        res.loc[maskb,'xb'] = 0
+        res.loc[maskf,'xf'] = 0
+        #Then, we advect one time step. To advect, just shift everything as calculated above.
+        #We will use a linear interpolation.
+        for target in targets:
+            #Define the mass of target along the length of the system at rhs of each cell
+            M_i,M_n,M_star,M_xf,M_xb = 'M_i_'+target,'M_n_'+target,'M_star_'+target,'M_xf_'+target,'M_xb_'+target
+            inp_mass,Min,M_t1 = 'inp_mass_'+target,'M_in_'+target,'M_t1_'+target
+            res.loc[:,M_i] = res.loc[:,target] #Quantity in each cell at time t. Note again this is what you want advected - not a concentration!
+            res.loc[:,M_n] = res.loc[:,M_i].cumsum() #Cumulative mass/other quantity
+            #Add the zero at the front as M_n(0) = 0
+            xx = np.append(0,res.dx.cumsum())#forward edge of each cell
+            yy = np.append(0,res.loc[:,M_n]) #Cumulative mass in the system
+            f1 = interp1d(xx,yy,kind='linear',fill_value='extrapolate')#Linear interpolation
+            res.loc[:,M_xf] = f1(res.xf.astype('float'))
+            #Check if the mass at the RHS of the cell is more than the mass in the cell, correct.
+            res.loc[res[M_xf]>res[M_n],M_xf] = res.loc[res[M_xf]>res[M_n],M_n]
+            res.loc[:,M_xb] = res[M_xf].shift(1)
+            res.loc[:,M_star] = res[M_xf] - res[M_xb]
+            #US boundary conditions
+            #Define total mass flowing in. Some will be lost at the US BC to diffusion.
+            M_t = bc_us[target]*params.val.Qin*dt
+            res.loc[dm0,Min] = M_t
+            res.loc[:,inp_mass] = 0 #initialize
+            #Case 1 - both xb and xf are outside the domain. 
+            #All mass comes in at the influent concentration
+            mask = (res.xb == 0) & (res.xf == 0)
+            M_us = 0
+            if sum(mask) != 0:
+                res.loc[mask,M_star] = bc_us[target]*params.val.Qin*res.del_0[mask]#Time to traverse cell * influent
+                #Record mass input from outside system for the water compartment here
+                res.loc[mask,inp_mass] = res.loc[mask,M_star]
+                #res.loc[mask,'M_star'] = res.bc_us*res.V1[mask]*res.Z1[mask] #Everything in these cells comes from outside of the domain
+                M_us = res.loc[mask,M_star].sum()
+            #Case 2 - xb is out of the range, but xf is in
+            #Need to compute the sum of a spatial integral from x = 0 to xf and then the rest is temporal with the inlet
+            mask = (res.xb == 0) & (res.xf != 0)
+            slope = res.loc[dm0,M_n]/res.loc[dm0,'dx'] #Need to ensure dimensions agree
+            if sum(mask) != 0:
+                #For this temporal piece, we are going to just make the mass balance between the
+                #c1 BCs and this case, which will only ever have one cell as long as Xf(i-1) = xb(i)
+                M_t =  params.val.Qin*bc_us[target]*dt - M_us #Redefine M_t with remaining temporal mass
+                res.loc[mask,M_star] = res.loc[mask,M_xf] + M_t
+                res.loc[mask,inp_mass] = M_t
+            #Case 3 - too close to origin for cubic interpolation, so we will use linear interpolation
+            #Not always going to occur
+            mask = (np.isnan(res[M_star]))  
+            if sum(mask) !=0:
+                res.loc[mask,M_star] = slope.reindex(res.loc[mask,M_star].index,method = 'ffill') * (res.xf[mask] - res.xb[mask])
+            #For 20250416, stop here - advection only. Will add dispersion later if needed
+            outres.loc[:,M_star] = res.loc[:,M_star]
+        return outres
 
     def forward_step_euler(self,ic,params,num_compartments,dt):
         """ Perform a forward calculation step to determine model unsteady-state fugacities

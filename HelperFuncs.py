@@ -138,8 +138,8 @@ def culvert_flow_est(
     res.loc[(res.hh_adj>=diameter/2),'h']=diameter-res.hh_adj
     res.loc[(res.hh_adj>=diameter),'h']=0.0
     res.loc[:,'theta']= 2 * np.arccos((diameter/2-res.h)/(diameter/2))
-    res.loc[(res.hh_adj<diameter/2),'area'] = 1/2*((diameter/2**2*(res.theta-np.sin(res.theta))))
-    res.loc[(res.hh_adj>=diameter/2),'area'] = np.pi*1/4/diameter**2-1/2*((diameter/2**2*(res.theta-np.sin(res.theta))))
+    res.loc[(res.hh_adj<diameter/2),'area'] = 1/2*(((diameter/2)**2*(res.theta-np.sin(res.theta))))
+    res.loc[(res.hh_adj>=diameter/2),'area'] = np.pi*1/4*diameter**2-1/2*(((diameter/2)**2*(res.theta-np.sin(res.theta))))
     res.loc[(res.hh_adj<diameter/2),'Pwet'] = (diameter/2)*res.theta
     res.loc[(res.hh_adj>=diameter/2),'Pwet'] =2*np.pi*(diameter/2)-(diameter/2)*res.theta
     res.loc[:,'R_h'] =res.area/res.Pwet #Hydraulic radius
