@@ -47,8 +47,8 @@ timeseries.loc[:,'outlevel_m'] = timeseries.outlevel_m +(69.215-51.2)/100#Measur
 timeseries.loc[:,'inlevel_m'] = timeseries.outlevel_m +0.03 #Assumed value
 #For Qin, tailwater depth = outlevel +0.05 (higher by 0.05m at head than tail)
 timeseries.loc[:,'Qin'] = 3600*culvert_flow_est(
-        timeseries.inlevel_m, #m, series or array, from channel bottom
-        timeseries.outlevel_m-0.05, #m, series or array, from channel bottom
+        timeseries.inlevel_m+0.05, #m, series or array, from channel bottom
+        timeseries.outlevel_m, #m, series or array, from channel bottom
         params.val.D_culvert_in, #m, culvert diameter (assumes circular)
         params.val.L_culvert_in,#m, culvert length
         head_offset=0., #m, measured from channel bottom 
@@ -93,7 +93,8 @@ if calc_Qout==True:
             tail_offset=0., #m, measured from channel bottom
             n_manning=params.val.culvert_n)
 
-
+#Testing - reduce Qin 
+#timeseries.loc[:,'Qin'] = timeseries.Qin/3600*6
 locsumm.loc['water','Depth'] = timeseries.outlevel_m[0]
 #Initialize the model
 qbl =  StormPond(locsumm,chemsumm,params,timeseries,numc)

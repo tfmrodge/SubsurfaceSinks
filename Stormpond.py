@@ -241,6 +241,7 @@ class StormPond(SubsurfaceSinks):
                 cols.append(i+'_bottom')
             Z = np.array(ponddims.loc[:,cols]).ravel(order='F')
             interps[i] = LinearNDInterpolator(pts, Z)
+        
         #X will always be at the points of res.x
         for t in range(ntimes):
             if t == 0:
@@ -255,6 +256,12 @@ class StormPond(SubsurfaceSinks):
                 res.loc[:,'Aplants']=params.val.LAI*(interps['W'](res.x,
                    ast.literal_eval(params.val.dimdict)['overflow'])*res.dx-res.toparea)#assume uniform plant coverage for emergent areas
                 res.loc[:,'Vwater'] = res.crossarea*res.dx
+                #Initialize particles by interpolating from influent to effluent at time zero.
+                f_part = interp1d([0,params.val.L],[timeseries.loc[t,'TSS_Cin_mg_L'],
+                                            timeseries.loc[t,'TSS_Coutmeas_mg_L']])
+                res.loc[:,'Vpart'] = timeseries.loc[t,'TSS_Cin_mg_L']*(res.loc[:,'Vwater']/((1000*
+                                                  locsumm.Density.topsoil)))#Convert to m3
+                #res = optimize.newton(init_Vpart,res,tol=1e-5)
                 #res.loc[:,plantarea]
                 #res.loc[:,'W'] = interps['W'](res.x,locsumm.Depth.water)
                 #res.loc[:,'Vwater'] = locsumm.Depth.Water*
@@ -363,67 +370,66 @@ class StormPond(SubsurfaceSinks):
                 print('Need to implement alternative routing')
             
             #Next, lets do some particle settling! 
-            if params.val.part_settling != 'explicit':
+            res.loc[:,'v1'] = res.Qwater/res.crossarea #velocity m/h
+            #'explicit' means we will determine based on the concentration at the last cell
+            if params.val.part_settling.lower() == 'empirical':
+                #For each time step we know overall mass loss of sediment g/hr, convert to m3/hr with density
+                rho = 1000*locsumm.Density.topsoil
+                params.val.Qin=inflow
+                #First, advect particles one time step.
+                targets =['Vpart']
+                bc_us = {'Vpart':timeseries.TSS_Cin_mg_L[t]/rho}#Volume-concentration
+                #Get to steady state
+                if (params.val.part_init.lower()) == 'ss' and (t == 0):
+                    #Initialize particles to steady-state
+                    minimizer = 1.
+                    res.loc[:,'Vpart'] = timeseries.TSS_Cin_mg_L[t]/rho*res.Vwater*10
+                    while minimizer > 1e-5:
+                        oldVpart = res.loc[:,'Vpart'].copy(deep=True)
+                        res = self.advect_only_1d(res,params,dt,targets,bc_us)
+                        #Next, determine MTC based on observed Cout. Happens after advection
+                        res.loc[:,'partdep_mtc'] = (res.M_star_Vpart.iloc[-1]-res.iloc[-1].Vwater
+                                    *timeseries.TSS_Coutmeas_mg_L[t]/rho)/res.channelarea.iloc[-1]
+                        #New particle concentration. Defined at end of timestep, put in Vpart
+                        res.loc[:,'Vpart'] = res.M_star_Vpart-res.loc[:,'partdep_mtc']*res.channelarea
+                        minimizer = abs(res.loc[:,'Vpart'].sum()-oldVpart.sum())
+                else:
+                    res = self.advect_only_1d(res,params,dt,targets,bc_us)
+                    #Next, determine MTC based on observed Cout. Happends after advection
+                    res.loc[:,'partdep_mtc'] = (res.M_star_Vpart.iloc[-1]-res.iloc[-1].Vwater
+                                *timeseries.TSS_Coutmeas_mg_L[t]/rho)/res.channelarea.iloc[-1]
+                    #New particle concentration. Defined at end of timestep, put in Vpart
+                    res.loc[:,'Vpart'] = res.M_star_Vpart-res.loc[:,'partdep_mtc']*res.channelarea
+                #Just like for flow, we will do a bulk mass balance on the particles
+                #dV(part) = (QinCin-QoutCout)/rho-deposition. If we assume all storage is settled:
+                # totaldep = 1/(rho)*(res.loc[0,'Qin'].values*timeseries.TSS_Cin_mg_L
+                #         -res.loc[max(res.index),'Qout'].values*timeseries.TSS_Coutmeas_mg_L)
+                #We will give each timestep a constant deposition settling mass transfer coefficient (m/h). This will allocate into 
+                #our discretization units based on area (m3/h=m2*m/h), which works as a proxy for velocity. Negative indicates resuspension
+                #res.loc[:,'partdep_mtc'] = (totaldep/res.channelarea.sum()).reindex(res.index)
+                #res.loc[:,'Vpart'] = np.max(0,res.Vpart-res.partdep_mtc*)
+                #removal = (res.partdep_mtc*res.channelarea)#.fillna(0) #m3
+                #newpartV = 1/(rho)*(inflow*timeseries.TSS_Cin_mg_L-outflow*timeseries.TSS_Coutmeas_mg_L)
+                #First cell, particle volume calculated from inlet particle concentration. Will need to be careful to ensure mass balance later
+                #res_time.loc[(slice(None),0),'water_partvol'] = dt*1/(1000*locsumm.Density.topsoil)*(res_time.loc[(slice(None),0),'Qin'].values*timeseries.TSS_Cin_mg_L).values
+                #water_partconc = 1/(rho)*(timeseries.TSS_Cin_mg_L).reindex(res,level=0)
+                # def calc_removal(part_mtc):
+                #     water_partconc_old = (res.Vpart)/res.Vwater
+                #     water_partconc_new = (water_partconc_old-part_mtc*res.channelarea)
+                #     minimizer = water_partconc_new[-1]-(1/rho*timeseries.TSS_Coutmeas_mg_L)
+                # testmtc = (totaldep/res.channelarea.sum()).reindex(res.index)*res.channelarea#Uniform water surface, just take first
+                # res.loc[:,'partdep_mtc'] = optimize.newton(calc_removal,testmtc,tol=1e-5)
+                #Then, we will find the particle concentration in the other cells at each time step by removing particles according to the mtc
+                #res.loc[:,'Vpart'] = (water_partconc-res.partdep_mtc)*res.Vwater
+            else:
+                #Estimate the settling velocity based on timeseries data. Assume uniform for now
                 #Ferguson and Church 2004, equation in helperfuncs
-                res.loc[:,'v1'] = res.Qwater/res.crossarea #velocity m/h
                 psd = np.array(ast.literal_eval(params.val.psd)) #um
                 psd[:,0] = psd[:,0]*1*10**-6 #convert to m
                 psd_df = particle_settling(psd,timeseries.loc[t,'Twater'],
                    R=locsumm.Density.topsoil/1000,C1=params.val.C1,C2=params.val.C1)
                 psd_df.loc[:,'vs']=3600*psd_df.vs#Convert from m/s to m/h
-                #Assume particles only advect explicitly and are evenly distributed in depth at x0
-                #Same lagrangian scheme as the advection from the fugmodel 1d adre 
-                def advect_psd(res,psd_df,params):
-                    outres = res.copy(deep=True)
-                    res = res.copy(deep=True)
-                    #Calculate time to cross each cell [T]
-                    res.loc[:,'del_0']=res.dx/res.v1
-                    res.loc[:,'c'] = res.v1*dt/res.dx #Courant number
-                    #res.loc[:,'Pe'] = res.v1*res.dx/(res.disp) #Grid peclet number
-                    #Initialize variables
-                    #Time taken to traverse full cells for back packet
-                    delb_test = pd.Series().reindex_like(res)
-                    delb_test[:] = 0 #Set to 0
-                    #delrb is the time remaining in the time step
-                    delb_test1,delrb_test = delb_test.copy(deep=True),delb_test.copy(deep=True)
-                    #Forward variables same as backwards 
-                    delf_test,delf_test1,delrf_test = delb_test.copy(deep=True),delb_test.copy(deep=True),delb_test.copy(deep=True)
-                    #Distance packets travel in time 
-                    xb_test,xb_test1 = delb_test.copy(deep=True),delb_test.copy(deep=True)
-                    xf_test,xf_test1 = delb_test.copy(deep=True),delb_test.copy(deep=True)
-                    #Maximum number of cells any one packet goes through
-                    maxcells = max(1,int(res.c.max()))
-                    #This loop calculates the distance & time backwards that a water packet takes
-                    for dels in range(maxcells):
-                        #Time to traverse a full cell
-                        delb_test += res['del_0'].shift(dels+1)
-                        delf_test += res['del_0'].shift(dels)
-                        #Calculate del_test1 only where a full spatial step is traversed
-                        delb_test1[delb_test<=dt] = delb_test[delb_test<=dt]
-                        delf_test1[delf_test<=dt] = delf_test[delf_test<=dt]
-                        #Do the same thing in reverse for delrb_test, if delrb_test is zero to prevent overwriting
-                        #Create a mask showing the cells that are finished
-                        maskb = (delb_test>dt) & (delrb_test==0)
-                        delrb_test[maskb] = dt - delb_test1 #Time remaining in the time step, back face
-                        maskf = (delf_test>dt) & (delrf_test==0)
-                        delrf_test[maskf] = dt - delf_test1 #Time remaining in the time step, forward face
-                        #Using delrb_test and the velocity of the current cell, calculate  the total distance each face travels
-                        xb_test1[maskb] = xb_test + delrb_test * res['v1'].shift(dels+1)
-                        xf_test1[maskf] = xf_test + delrf_test * res['v1'].shift(dels)
-                        #Then, update the "dumb" distance travelled
-                        xb_test += res['dx'].shift(dels+1)
-                        xf_test += res['dx'].shift(dels)
-                    #Outside the loop, we clean up the boundaries and problem cases
-                    #Do a final iteration for remaining NaNs & 0s
-                    delrb_test[delrb_test==0] = dt - delb_test1
-                    delrf_test[delrf_test==0] = dt - delf_test1
-                    #TR 20231114 - replacing np.isnan with pd.isnull()
-                    xb_test1[pd.isnull(xb_test1)] = xb_test + delrb_test * res['v1'].shift(dels+1)
-                    xf_test1[pd.isnull(xf_test1)] = xf_test + delrf_test * res['v1'].shift(dels)
-                    #Set those which don't cross a full cell
-                    xb_test1[res['del_0'].shift(1)>=dt] = res['v1'].shift(1)*dt
-                    xf_test1[res.del_0>=dt] = res.v1*dt
-                    return outres
+                
                     # for ind,d in enumerate(psd_df.d):
                     #     res.loc[:,'m_d'+str(ind)]
                 #advect_psd(res,psd_df,params)
@@ -453,20 +459,8 @@ class StormPond(SubsurfaceSinks):
             #For now, assume that inflow only to the water compartm     
         #Final dataframe should be a 3-level multiindex of chemical,time,space. This will be time and space
         res_time = pd.concat(res_t)
-        if params.val.part_settling.lower() == 'explicit':
-            #Estimate the settling velocity based on timeseries data. Assume uniform for now
-            #For each time step we know overall mass loss of sediment g/hr, convert to m3/hr with density
-            totaldep = 1/(1000*locsumm.Density.topsoil)*(res_time.loc[(slice(None),0),'Qin'].values*timeseries.TSS_Cin_mg_L
-                        -res_time.loc[(slice(None),max(res_time.index.levels[1])-1),'Qout'].values*timeseries.TSS_Coutmeas_mg_L)
-            #We will give each timestep a constant deposition settling mass transfer coefficient (m/h). This will allocate into 
-            #our discretization units based on area (m3/h=m2*m/h), which works as a proxy for velocity. Negative indicates resuspension
-            res_time.loc[:,'partdep_mtc'] = (totaldep/res_time.groupby(level=0).channelarea.sum()).reindex(res_time.index,level=0)
-            #First cell, particle volume calculated from inlet particle concentration. Will need to be careful to ensure mass balance later
-            #res_time.loc[(slice(None),0),'water_partvol'] = dt*1/(1000*locsumm.Density.topsoil)*(res_time.loc[(slice(None),0),'Qin'].values*timeseries.TSS_Cin_mg_L).values
-            res_time.loc[:,'water_partconc'] = 1/(1000*locsumm.Density.topsoil)*(res_time.loc[(slice(None),0),'Qin'].values*timeseries.TSS_Cin_mg_L).reindex(res_time.index,level=0)
-            #Then, we will find the particle concentration in the other cells at each time step by removing particles according to the mtc
-            removal = (res_time.partdep_mtc*res_time.channelarea)#.fillna(0) #m3
-            res_time.loc[:,'water_partconc'] = res_time.water_partconc-removal.groupby(level=0).cumsum().shift(1)
+        #if params.val.part_settling.lower() == 'explicit':
+            
         return res_time
     
     # def simple_route(res,inflow,outflow,rainrate,dt,params,ponddims):
