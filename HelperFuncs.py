@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import math
 import pdb
+from scipy.interpolate import PchipInterpolator
+
 
 def ppLFER(L,S,A,B,V,l,s,a,b,v,c):
     """polyparameter linear free energy relationship (ppLFER) in the 1 equation form from Goss (2005)
@@ -170,3 +172,92 @@ def culvert_flow_est(
     # #Submerged Orifice flow
     # res.loc[(res.hh_adj>=diameter) & (res.ht_adj>diameter),'Q'] = Co*area*np.sqrt(2*g*(res.hh_adj-res.ht_adj))
     return res.Q
+
+def make_input_timeseries(
+        df,
+        dt,
+        df_ref,
+        time_bnds=None,
+        time_col='time',
+        interp_cols=None,
+        constant_from_ref=True,
+        nonneg_cols = None
+    ):
+    """
+    Create an evenly-spaced input timeseries using PCHIP interpolation, filling 
+    other missing columns from df_ref
+    
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Must contain `time_col` and columns in `interp_cols`.
+    dt : float
+        Desired timestep in hours.
+    df_ref : pandas.DataFrame
+        Reference dataframe used to fill non-interpolated columns.
+        Typically one row, but can be longer.
+    time_bnds : list or tuple of [tmin, tmax], optional
+        Explicit time limits (in hours).
+    time_col : str
+        Name of the time column.
+    interp_cols : list of str
+        Parameter columns to interpolate.
+    constant_from_ref : bool
+        If True: non-interpolated columns = first row of df_ref.
+        If False: drop non-interpolated columns.
+
+    Returns
+    -------
+    res : pandas.DataFrame
+        Dataframe with uniform time spacing and interpolated values.
+    """
+
+    df = df.copy()
+
+    # --- Ensure numeric time ---
+    df[time_col] = pd.to_numeric(df[time_col], errors='coerce')
+    t = df[time_col].dropna().values
+
+    if interp_cols is None:
+        raise ValueError("interp_cols must be provided")
+
+    # --- Ensure numeric parameter columns ---
+    for c in interp_cols:
+        df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # --- Construct new time grid ---
+    if time_bnds is not None:
+        t_new = np.arange(time_bnds[0], time_bnds[1] + dt, dt)
+    else:
+        t_new = np.arange(np.nanmin(t), np.nanmax(t) + dt, dt)
+
+    res = pd.DataFrame({time_col: t_new})
+
+    # --- Handle reference values ---
+    if constant_from_ref:
+        ref_vals = df_ref.iloc[0].to_dict()
+        # Fill with reference defaults for all ref columns
+        for k, v in ref_vals.items():
+            if k != time_col and k not in interp_cols:
+                res[k] = v
+
+    # --- Interpolate each parameter ---
+    for col in interp_cols:
+        y = df[col]
+        mask = ~y.isna() & ~df[time_col].isna()
+
+        if mask.sum() == 0:
+            # Entire column is NaN → propagate NaNs
+            res[col] = np.nan
+            continue
+
+        xm = df.loc[mask, time_col].values
+        ym = df.loc[mask, col].values
+
+        # PCHIP interpolation 
+        pchip = PchipInterpolator(xm, ym, extrapolate=True)
+        res[col] = pchip(t_new)
+        if col in nonneg_cols:#Enforce positivity for selected columns
+            res[col] = res[col].clip(lower=0)
+
+    return res
