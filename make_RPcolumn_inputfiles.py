@@ -114,11 +114,7 @@ def build_model_ready_timeseries(
 
         # Hydraulics conversion
         df["FlowRate_m3_hr"] = df["FlowRate_ml_min"] * 6e-5
-
-        # Merge unified chemical table
-        df_chem = chem_unified[soilcol]
-        df = df.merge(df_chem, on="time", how="left")
-        
+      
         # --- Merge unified chemical table for this soil column ---
         df_chem = chem_unified[soilcol].copy()
         chem_tmin = df_chem['time'].min()
