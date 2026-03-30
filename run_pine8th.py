@@ -88,7 +88,7 @@ else:
         pass
     
 #pdb.set_trace()
-calcflow = 'Load' #True #
+calcflow = True #'Load' #True #
 flowname = 'flowtest.pkl'
 if calcflow is True:
     flow_time = bc.flow_time(locsumm,params,['water','subsoil'],timeseries)

@@ -393,7 +393,7 @@ class SubsurfaceSinks(FugModel):
                 rainrate = pd.DataFrame(np.array(timeseries.loc[(slice(None),'drain'),'QET']),index = timeseries.index.levels[0]).reindex(res.index,level=1).loc[:,0]
                 #Test this.
                 #rainrate = rainrate.reindex(res.index,level=1).loc[:,0]
-            except TypeError:
+            except Exception as e:
                 rainrate = timeseries.RainRate.reindex(res.index,level=1)
         #D values (m³/h), N (mol/h) = a*D (activity based)
         #Loop through compartments to set D values
@@ -936,7 +936,7 @@ class SubsurfaceSinks(FugModel):
             #Feed the time to params
             res_t = res.loc[(slice(None),t,slice(None)),:]
             #For error checking, stop at specific time
-            if (t == 260) or (t==265):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
+            if (timeseries.time[t] == 1488.5):#260: 467 #216:#412: #630# 260 is location of mass influx from tracer test; stop at spot for error checking
                 #pdb.set_trace() #143.39999999996508
                 dangit = 'cute_cat'
             #Call the ADRE code in the FugModel module

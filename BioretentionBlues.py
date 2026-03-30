@@ -7,7 +7,7 @@ Created on Tue Jul  9 10:52:52 2019
 
 from FugModel import FugModel #Import the parent FugModel class
 from Subsurface_Sinks import SubsurfaceSinks
-from HelperFuncs import df_sliced_index #Import helper functions
+from HelperFuncs import df_sliced_index, slice_timeseries #Import helper functions
 from scipy import optimize
 import numpy as np
 import pandas as pd
@@ -17,8 +17,11 @@ import pdb #Turn on for error checking
 from warnings import simplefilter
 from hydroeval import kge #Kling-Gupta efficiency (Kling-Gupta et al., 2009)
 import hydroeval
-from scipy.optimize import minimize
+from scipy.optimize import minimize, differential_evolution
 import psutil
+from pathlib import Path
+from datetime import datetime
+import time
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 simplefilter(action="ignore", category= RuntimeWarning)
 simplefilter(action="ignore", category= FutureWarning)
@@ -729,7 +732,7 @@ class BCBlues(SubsurfaceSinks):
             except AttributeError:#If no unsat is given, will just use saturated value. Not ideal without spin-up period.
                 Q10_exfp = params.val.Kn * (res.Area.drain + params.val.Cs*\
                            res.P.drain*res.Depth.drain_pores/res.Depth.drain)
-            Q10_exfus = 1/dt*((1-res.Porosity.drain)*(res.Depth.drain_pores-params.val.hpipe)*res.Area.drain) + (Qin_d-Qcap)
+            Q10_exfus = 1/dt*((res.Porosity.drain)*(res.Depth.drain_pores-params.val.hpipe)*res.Area.drain) + (Qin_d-Qcap)
             try:
                 Sss = res.V[compartments[5]] /(res.V[compartments[4]]*(res.Porosity[compartments[4]])) 
                 Q10_exfds = 1/dt * ((1-Sss) * res.Porosity[compartments[4]]*res.V[compartments[4]])
@@ -738,9 +741,9 @@ class BCBlues(SubsurfaceSinks):
             Q10_exf = max(min(Q10_exfp,Q10_exfus,Q10_exfds),0)
             dVdest = (Qin_d - Qcap - Q10_exf)*dt #Estimate the height for outflow - assuming free surface at top of bucket
             draindepth_est =  (res.loc[compartments[1],'V'] + dVdest) /(res.Area.drain * (res.Porosity.drain))
-            piperem = params.val.hpipe/100 #Keep the level above the top of the pipe so that flow won't go to zero
+            piperem = max(1e-6,params.val.hpipe/100) #Keep the level above the top of the pipe so that V won't go to zero
             if draindepth_est >= (params.val.hpipe+piperem): #Switched to estimated drainage depth 20190912. Added orifice control 20201019
-                Q10_us = 1/dt * ((draindepth_est-(params.val.hpipe+piperem))*(1-res.Porosity.drain)\
+                Q10_us = 1/dt * ((draindepth_est-(params.val.hpipe+piperem))*(res.Porosity.drain)\
                 *res.Area.drain)
                 #Orifice control of outflow. This does not differentiate between water in the pipe and outside of the pipe, but
                 #simply restricts the pipe flow based on the orifice opening. Code is from the SWMM manual for a partially
@@ -891,9 +894,9 @@ class BCBlues(SubsurfaceSinks):
         times = timeseries.index
         res_t = dict.fromkeys(times,[]) 
         #pdb.set_trace()
-        for t in range(ntimes):
-            if t == 0:
-                dt = timeseries.time[1]-timeseries.time[0]
+        for t in times:
+            if t == times.min():
+                dt = timeseries.time[t+1]-timeseries.time[t]
             else:                
                 dt = timeseries.time[t]-timeseries.time[t-1] #For adjusting step size
             #First, update params. Updates:
@@ -1146,114 +1149,225 @@ class BCBlues(SubsurfaceSinks):
         fig.savefig(fpath + 'simstorm1.pdf',format = 'pdf')
         return fig
         
-    def calibrate_flows(self,timeseries,paramnames,param0s,bounds=((0.0,1.0),(0.0,1.0),(0.0,1.0))):
-        '''
-        Calibrate flows based on measured effluent in the "timeseries"
-        file and a test parameter name (string) and initial value (param0)
-        
-        Attributes:
-        -----------        
-        timeseries (df) - Input timeseries
-        paramnames (list of str) - parameters to be tuned
-        param0s (list of float) - initial values for the parameters
-        bounds (list of tuples) - Bounds for the parameters. 
-        '''
-        #Define the optimization function
-        def optBC_flow(param,paramname):
-            #No negative test values
-            if (param<0).sum() > 0:
-                obj = 999
-            else:
-                #Set up and run with the test value, defined by the optimize function as "param"
-                paramtest = self.params
-                locsummtest = self.locsumm
-                for ind, paramname in enumerate(paramnames):
-                    paramtest.loc[paramname,'val'] = param[ind]
-                    #For depth of native soil, need to change locsumm
-                    if paramname == 'native_depth':
-                        locsummtest.loc['native_soil','Depth'] = paramtest.loc[paramname,'val']
-                flowtest = self.flow_time(locsummtest,paramtest,['water','subsoil'],timeseries)
-                timeseries.loc[:,'Q_drainout'] = np.array(flowtest.loc[(slice(None),'drain'),'Q_todrain'])
-                #Kling-Gupta Efficiency (modified Nash-Sutcliffe) can be our measure of model performance
-                eff = hydroeval.evaluator(kge, np.array(timeseries.loc[timeseries.time>0,'Q_drainout']),\
-                                      np.array(timeseries.loc[timeseries.time>0,'Qout_meas']))
-                #An efficiency of 1 is ideal, therefore we want to see how far it is from 1
-                obj = (1-eff[0])[0]
-            return obj
-        
-        #Choose solver. L-BFGS-B works pretty well, might need to change things to change the solver.
-        res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bounds,method='L-BFGS-B',options={'disp': True})
-        #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='SLSQP',options={'disp': True})
-        #res = minimize(optBC_flow,param0s,args=(paramnames,),bounds=bnds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
+    def calibrate_flows(
+        self,
+        timeseries,
+        paramnames,
+        param0s,
+        bounds,
+        *,
+        solver="minimize",
+        method="L-BFGS-B",
+        tol=None,
+        solver_kwargs=None,
+        iter_logger=None,
+    ):
+        """
+        Calibrate hydrologic parameters.
+    
+        Parameters
+        ----------
+        solver : {"minimize", "differential_evolution"}
+            Optimization backend.
+        method : str
+            Method for scipy.optimize.minimize (ignored for DE).
+        solver_kwargs : dict
+            Passed directly to the solver.
+            For DE, this may include:
+                - workers
+                - maxiter
+                - popsize
+                - polish (bool)
+        iter_logger : callable, optional
+            Called as iter_logger(params, objective) per evaluation.
+        """
+    
+        if solver_kwargs is None:
+            solver_kwargs = {}  
+    
+        # ----------------------------------
+        # SOLVER DISPATCH
+        # ----------------------------------
+        if solver == "minimize":
+            res = minimize(
+                optBC_flow_objective,
+                param0s,
+                method=method,
+                bounds=bounds,
+                tol=tol,
+                args=(self, timeseries, paramnames),
+                options=solver_kwargs,
+            )
+    
+        elif solver in ("de", "differential_evolution"):
+            res = differential_evolution(
+                optBC_flow_objective,
+                bounds=bounds,
+                args=(self, timeseries, paramnames),
+                **solver_kwargs,
+            )
+    
+        else:
+            raise ValueError(
+                f"Unknown solver '{solver}'. "
+                "Use 'minimize' or 'differential_evolution'."
+            )
+    
         return res
-        
-    def calibrate_tracer(self,timeseries,paramnames,param0s,bounds,
-                         tolerance=1e-5,flows=None,objective=None):
-        '''
-        Calibrate based on measured effluent concentration in the "timeseries"
-        file and a test parameter name (string) and initial value (param0)
-        flows should be a string with the filepath of a flow pickle or None
 
-        Attributes:
-        -----------        
-        timeseries (df) - Input timeseries
-        paramnames (list of str) - parameters to be tuned
-        param0s (list of float) - initial values for the parameters
-        bounds (list of tuples) - Bounds for the parameters. 
-        tolerance (optional, float) - what tolerance to run to
-        flows(df, optional) - Input flow file (if you doon't want to run for both)
-        objective (str, optional) - Run for what objective. Currently, will work for KGE by default
-        or recovery if you put something other than "None" in
-        '''
-        #pdb.set_trace()
-        #Define the optimization function
-        def optBC_tracer(param,paramname,flows):
-            #No negative test values
-            if (param<0).sum() > 0:
-                obj = 999
+    def calibrate_tracer(
+        self,
+        timeseries,
+        paramnames,
+        param0s,
+        bounds,
+        *,
+        flows=None,
+        objective=None,
+        solver="minimize",
+        method="L-BFGS-B",
+        tol=None,
+        solver_kwargs=None,
+        iter_logger=None,
+    ):
+        """
+        Tracer calibration with support for SciPy minimize or differential evolution.
+    
+        Parameters
+        ----------
+        solver : {"minimize", "differential_evolution", "de"}
+        solver_kwargs : dict
+            Passed directly to solver.
+        iter_logger : callable
+            Called as iter_logger(params, objective_value).
+        """
+    
+        if solver_kwargs is None:
+            solver_kwargs = {}
+    
+        # ----------------------------------
+        # objective function
+        # ----------------------------------
+        def optBC_tracer(param):
+    
+            if (np.asarray(param) < 0).any():
+                obj = 999.0
             else:
-                #Set up and run with the test value, defined by the optimize function as "param"
-                paramtest = self.params
-                locsummtest = self.locsumm
-                for ind, paramname in enumerate(paramnames):
-                    paramtest.loc[paramname,'val'] = param[ind]
-                    #For depth of native soil, need to change locsumm
-                    if paramname == 'native_depth':
-                        locsummtest.loc['native_soil','Depth'] = paramtest.loc[paramname,'val']
-                if flows == None:#Run flows if no flow file given
-                    res = self.flow_time(locsummtest,paramtest,['water','subsoil'],timeseries)
-                    mask = timeseries.time>=0
-                    minslice = np.min(np.where(mask))
-                    maxslice = np.max(np.where(mask))#minslice + 5 #
-                    res = df_sliced_index(res.loc[(slice(minslice,maxslice),slice(None)),:])    
-                else:#If there is a flow file, run with that.
-                    res = pd.read_pickle(flows)
-                res = self.input_calc(locsummtest,self.chemsumm,paramtest,self.pp,self.numc,timeseries,flow_time=res)
-                res = self.run_it(locsummtest,self.chemsumm,paramtest,self.pp,self.numc,timeseries,input_calcs=res)                
-                mass_flux = self.mass_flux(res,self.numc)                 
-                if objective == None:
-                    Couts = self.conc_out(self.numc,timeseries,self.chemsumm,res,mass_flux)
-                    KGE = []
-                    for ind,chem in enumerate(self.chemsumm.index):
-                        KGE.append((hydroeval.evaluator(kge, np.array(Couts.loc[:,chem+'_Coutest']),\
-                                          np.array(Couts.loc[:,chem+'_Coutmeas'])))[0])
-                    #Kling-Gupta Efficiency (modified Nash-Sutcliffe) can be our measure of model performance
-                    #If multiple compounds given, this just takes the average.
-                    eff = np.mean(KGE)
-                    #An efficiency of 1 is ideal, therefore we want to see how far it is from 1
-                    obj = (1-eff)
+                paramtest = self.params.copy()
+                locsummtest = self.locsumm.copy()
+    
+                for i, pname in enumerate(paramnames):
+                    paramtest.loc[pname, "val"] = param[i]
+                    if pname == "native_depth":
+                        locsummtest.loc["native_soil", "Depth"] = param[i]
+    
+                # ----------------------------------
+                # FLOWS
+                # ----------------------------------
+                if flows is None:
+                    flow_time = self.flow_time(
+                        locsummtest,
+                        paramtest,
+                        ["water", "subsoil"],
+                        timeseries,
+                    )
+                    mask = timeseries.time >= 0
+                    minslice, maxslice = np.where(mask)[0][[0, -1]]
+                    flow_time = df_sliced_index(
+                        flow_time.loc[(slice(minslice, maxslice), slice(None)), :]
+                    )
                 else:
-                    recovery = mass_flux.N_effluent.groupby(level=0).sum()/mass_flux.N_influent.groupby(level=0).sum()
-                    obj = abs(objective['recovery']-recovery)
-                print(obj,param)
+                    flow_time = pd.read_pickle(flows)
+    
+                # ----------------------------------
+                # RUN TRANSPORT
+                # ----------------------------------
+                input_calcs = self.input_calc(
+                    locsummtest,
+                    self.chemsumm,
+                    paramtest,
+                    self.pp,
+                    self.numc,
+                    timeseries,
+                    flow_time=flow_time,
+                )
+    
+                res = self.run_it(
+                    locsummtest,
+                    self.chemsumm,
+                    paramtest,
+                    self.pp,
+                    self.numc,
+                    timeseries,
+                    input_calcs=input_calcs,
+                )
+    
+                mass_flux = self.mass_flux(res, self.numc)
+    
+                # ----------------------------------
+                # OBJECTIVE
+                # ----------------------------------
+                if objective is None:
+                    Couts = self.conc_out(
+                        self.numc,
+                        timeseries,
+                        self.chemsumm,
+                        res,
+                        mass_flux,
+                    )
+    
+                    KGEs = []
+                    for chem in self.chemsumm.index:
+                        KGEs.append(
+                            hydroeval.evaluator(
+                                kge,
+                                np.asarray(Couts[f"{chem}_Coutest"]),
+                                np.asarray(Couts[f"{chem}_Coutmeas"]),
+                            )[0]
+                        )
+    
+                    eff = np.mean(KGEs)
+                    obj = 1.0 - eff
+    
+                else:
+                    recovery = (
+                        mass_flux.N_effluent.groupby(level=0).sum()
+                        / mass_flux.N_influent.groupby(level=0).sum()
+                    )
+                    obj = np.abs(objective["recovery"] - recovery)
+    
+            if iter_logger is not None:
+                iter_logger(np.asarray(param).copy(), obj)
+    
             return obj
-        
-        
-        #Choose optimization function. Runs OK with L-BFGS-B, may need to change things to run others
-        res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='L-BFGS-B',tol=tolerance,options={'disp': True,'maxfun':100})
-        #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='SLSQP',options={'disp': True})
-        #res = minimize(optBC_tracer,param0s,args=(paramnames,flows),bounds=bounds,method='nelder-mead',options={'xtol': 1e-3, 'disp': True})
-        return res 
+    
+        # ----------------------------------
+        # SOLVER DISPATCH
+        # ----------------------------------
+        if solver == "minimize":
+            res = minimize(
+                optBC_tracer,
+                param0s,
+                method=method,
+                bounds=bounds,
+                tol=tol,
+                options=solver_kwargs,
+            )
+    
+        elif solver in ("de", "differential_evolution"):
+            res = differential_evolution(
+                optBC_tracer,
+                bounds=bounds,
+                **solver_kwargs,
+            )
+    
+        else:
+            raise ValueError(
+                f"Unknown solver '{solver}'. "
+                "Use 'minimize' or 'differential_evolution'."
+            )
+    
+        return res
 
     def plot_idfs(self,pltdata,pltvars=['pct_stormsewer','LogD','LogI'],cmap=None,
                   pltvals=False,savefig=False,figpath=None,interplims = [0.,1.],figsize=(10,6.7),
@@ -1371,11 +1485,474 @@ class BCBlues(SubsurfaceSinks):
         nts = negtimeseries.append(nts)
         nts.reset_index(inplace=True,drop=True)
         return nts
+
+def run_bc_system(config, system_name):
+    """
+    Run BCBlues for a single bioretention system (soil column, sheet name).
+
+    Parameters
+    ----------
+    config : dict
+        Run configuration dictionary.
+    system_name : str
+        Sheet name / system identifier (e.g., 'A').
+
+    Returns
+    -------
+    dict
+        All model outputs and intermediates.
+    """
+
+    t0 = time.time()
+
+    paths = config["paths"]
+    flags = config["flags"]
+    model_cfg = config["model"]
+
+    numc = model_cfg["numc"]
+
+    # ------------------------------------
+    # output naming suffix
+    # ------------------------------------
+    stamp = ""
+    if flags.get("timestamp_outputs", False):
+        stamp = datetime.now().strftime("_%Y%m%d_%H%M%S")
+
+    label = config.get("run_label", None)
+    label = f"_{label}" if label else ""
+
+    suffix = f"_{system_name}{stamp}{label}"
+
+    pkl_dir = Path(paths["pickle_dir"])
+    pkl_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------
+    # Load timeseries (backwards compatible)
+    # ------------------------------------
+    ts_csv = Path(paths["timeseries_dir"]) / f"InputTimeseries_{system_name}.csv"
+    ts_xlsx = Path(paths["timeseries_dir"]) / "InputTimeseries.xlsx"
+    ts_pkl = Path(paths["timeseries_dir"]) / f"InputTimeseries_{system_name}.pkl"
+
+    if ts_csv.exists():
+        timeseries = pd.read_csv(ts_csv)
+    elif ts_pkl.exists():
+        timeseries = pd.read_pickle(ts_pkl)
+    elif ts_xlsx.exists():
+        timeseries = pd.read_excel(ts_xlsx, sheet_name=system_name)
+    else:
+        raise FileNotFoundError(f"No timeseries found for system {system_name}")
         
+    
+    ts_cfg = config.get("timeslice", {})
+    timeseries = slice_timeseries(
+            timeseries,
+            tstart=ts_cfg.get("tstart", None),
+            tend=ts_cfg.get("tend", None))
+
+
+    # ------------------------------------
+    # Load system‑specific sheets
+    # ------------------------------------
+    locsumm  = pd.read_excel(paths["locsumm_xlsx"],  sheet_name=system_name,index_col = 0)
+    params   = pd.read_excel(paths["params_xlsx"],   sheet_name=system_name,index_col = 0)
+    if flags["pulse"]:
+        params.loc['Pulse','val'] = 1
+    else:
+        params.loc['Pulse','val'] = 0
+    chemsumm = pd.read_excel(paths["chemsumm_xlsx"],index_col = 0) #Chemsumm same for all systems
+    #Filter chemsumm to runchems
+    if model_cfg["run_chems"]:
+        chemsumm = chemsumm[chemsumm.index.isin(model_cfg["run_chems"])]
+    else:
+        model_cfg["run_chems"] = list(chemsumm.index)
+    #Filter so that compounds in mass plot have to be in chemsumm
+    model_cfg["compound_mass_plot"] = [
+        c for c in model_cfg["compound_mass_plot"]
+        if c in model_cfg["run_chems"]
+    ]
+
+    # ------------------------------------
+    # Initialize model
+    # ------------------------------------
+    bc = BCBlues(locsumm, chemsumm, params, timeseries, numc)
+
+    # ------------------------------------
+    # timestep modification
+    # ------------------------------------
+    if flags["modify_timestep"]:
+        indfactor = config["timestep"]["indfactor"]
+        if indfactor != 1:
+            timeseries = bc.modify_timestep(timeseries, indfactor)
+
+    # ------------------------------------
+    # Flow calculations
+    # ------------------------------------
+    flow_time = None
+    if flags["calcflow"]:
+        flow_time = bc.flow_time(
+            locsumm, params,
+            numc=['water', 'subsoil'],
+            timeseries=timeseries
+        )
+
+        mask = timeseries.time >= 0
+        minslice, maxslice = np.where(mask)[0][[0, -1]]
+        flow_time = df_sliced_index(
+            flow_time.loc[(slice(minslice, maxslice), slice(None)), :]
+        )
+
+        if flags["save_intermediate"]:
+            flow_time.to_pickle(pkl_dir / f"flow_time{suffix}.pkl")
+    # ------------------------------------
+    # Generic hydrology plotting + metrics
+    # ------------------------------------
+    hydro_cfg = config.get("hydrology_plot", {})
+    KGE_hydro = None
+    inf_pct = None
+
+    if hydro_cfg.get("enable", False) and flow_time is not None:
+
+        windows = hydro_cfg.get("windows", "all")
+        comps = hydro_cfg.get("compartments", ["drain", "water"])
+        yvar = hydro_cfg.get("yvar", "Q_todrain")
+
+        try:
+            # ---- Compute metrics over full record ----
+            inf_pct = 1.0 - (
+                flow_time.loc[(slice(None), 'drain'), 'Q_todrain'].sum() /
+                flow_time.loc[(slice(None), 'pond'), 'Q_in'].sum()
+            )
+            print(f"Q_todrain/Q_in = {inf_pct}")
+            KGE_hydro = hydroeval.evaluator(
+                kge,
+                np.asarray(flow_time.loc[(slice(None), 'drain'), 'Q_todrain']),
+                np.asarray(timeseries.loc[timeseries.time >= 0, 'Qout_meas'])
+            )[0]
+            print(f"KGE Hydro = {KGE_hydro}")
+            
+            def is_plot_all(windows):
+                if windows is None:
+                    return None
+                if isinstance(windows, str):
+                    return windows == "all"
+                if isinstance(windows, (list, tuple)):
+                    return len(windows) == 1 and windows[0] == "all"
+                return False
+
+            # ---- Plot logic ----
+            if is_plot_all(windows): 
+                bc.plot_flows(
+                    flow_time,
+                    Qmeas=timeseries.loc[timeseries.time >= 0, 'Qout_meas'],
+                    compartments=comps,
+                    yvar=yvar
+                )
+
+            else:
+                for t0, t1 in windows:
+                    if t0 is None:
+                        t0 = flow_time.time.min()
+                    if t1 is None:
+                        t1 = flow_time.time.max()
+
+                    mask = (flow_time.time >= t0) & (flow_time.time <= t1)
+
+                    bc.plot_flows(
+                        flow_time.loc[mask],
+                        Qmeas=timeseries.loc[
+                            (timeseries.time >= t0) & (timeseries.time <= t1),
+                            'Qout_meas'
+                        ],
+                        compartments=comps,
+                        yvar=yvar
+                    )
+
+        except KeyError:
+            pass
+
+    # ------------------------------------
+    # Input calculations
+    # ------------------------------------
+    input_calcs = None
+    if flags["calcinp"]:
+        input_calcs = bc.input_calc(
+            locsumm, chemsumm, params, bc.pp, numc,
+            timeseries, flow_time=flow_time
+        )
+
+        if flags["save_intermediate"]:
+            input_calcs.to_pickle(pkl_dir / f"input_calcs{suffix}.pkl")
+
+    # ------------------------------------
+    # Run model
+    # ------------------------------------
+    res = None
+    if flags["runall"]:
+        res = bc.run_BC(locsumm, chemsumm, timeseries, numc, params, pp=None)
+    elif flags["runmodel"]:
+        res = bc.run_it(
+            locsumm, chemsumm, params, bc.pp, numc,
+            timeseries, input_calcs=input_calcs
+        )
         
-        
-        
-        
-        
-        
-      
+    if (flags["save_intermediate"]) and (res is not None):
+        res.to_pickle(pkl_dir / f"output{suffix}.pkl")
+    mass_flux, mbal, mbal_cum, Couts, KGE, recovery = None, None, None, None, None, None
+
+    if res is not None:
+        # ------------------------------------
+        # Post‑processing
+        # ------------------------------------
+        mass_flux = bc.mass_flux(res, numc)
+        mbal = bc.mass_balance(res, numc, mass_flux)
+        Couts = bc.conc_out(numc, timeseries, chemsumm, res, mass_flux)
+    
+        recovery = (
+            mass_flux.N_effluent.groupby(level=0).sum() /
+            mass_flux.N_influent.groupby(level=0).sum()
+        )
+    
+        KGE = {}
+        for chem in chemsumm.index:
+            try:
+                KGE[chem] = hydroeval.evaluator(
+                    kge,
+                    np.asarray(Couts[f"{chem}_Coutest"]),
+                    np.asarray(Couts[f"{chem}_Coutmeas"])
+                )[0]
+            except KeyError:
+                pass
+    
+        # ------------------------------------
+        # Optional plots
+        # ------------------------------------
+        if flags["plot_mass_balance"]:
+            mbal_cum = bc.mass_balance_cumulative(
+                numc, mass_balance=mbal, normalized=True
+            )
+    
+            for compound in model_cfg["compound_mass_plot"]:
+                bc.BC_fig(
+                    numc,
+                    mass_balance=mbal_cum,
+                    time=model_cfg["mass_plot_time"],
+                    compound=compound,
+                    figheight=6,
+                    fontsize=7,
+                    dpi=300
+                )
+    
+        if flags["plot_conc"]:
+            bc.plot_Couts(
+                res, Couts,
+                multfactor=model_cfg["multfactor_conc_plot"]
+            )
+
+    # ------------------------------------
+    # Return package
+    # ------------------------------------
+    return {
+        "system": system_name,
+        "bc": bc,
+        "params": params,
+        "locsumm": locsumm,
+        "chemsumm": chemsumm,
+        "timeseries": timeseries,
+        "flow_time": flow_time,
+        "input_calcs": input_calcs,
+        "res": res,
+        "mass_flux": mass_flux,
+        "mass_balance": mbal,
+        "mass_balance_cum": mbal_cum,
+        "Couts": Couts,
+        "KGE": KGE,
+        "recovery": recovery,
+        "runtime_s": time.time() - t0
+    }
+
+    
+def calibrate_flow_system(
+    config,
+    system_name,
+    *,
+    paramnames,
+    param0s,
+    bounds,
+    solver="differential_evolution",
+    solver_method="L-BFGS-B",
+    solver_kwargs=None,
+    tol=None,
+    prefix=None,
+    suffix=None,
+    output_dir=None,
+    save_forward_run=True,
+):
+    """
+    Calibrate hydrologic parameters for a single BC system.
+
+    Parameters
+    ----------
+    config : dict
+        Model configuration dictionary.
+    system_name : str
+        System / sheet name (e.g. 'A').
+    paramnames : list[str]
+        Names of parameters to calibrate.
+    param0s : list[float]
+        Initial guesses (used only for `minimize`).
+    bounds : list[tuple]
+        Bounds for parameters.
+    solver : {"minimize", "differential_evolution", "de"}
+        Optimization backend.
+    solver_kwargs : dict
+        Passed directly to SciPy solver.
+    prefix, suffix : str
+        Optional label components for outputs.
+    output_dir : str or Path
+        Directory for calibrated params and logs.
+    """
+
+    t0 = time.time()
+
+    if solver_kwargs is None:
+        solver_kwargs = {}
+
+    # --------------------------------------------------
+    # Tag construction
+    # --------------------------------------------------
+    tag_parts = []
+    if prefix:
+        tag_parts.append(prefix)
+    if suffix:
+        tag_parts.append(suffix)
+    if not tag_parts:
+        tag_parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+    tag = "_".join(tag_parts)
+
+    # --------------------------------------------------
+    # Load system (NO forward run)
+    # --------------------------------------------------
+    loader_cfg = config.copy()
+    loader_cfg["flags"] = loader_cfg["flags"].copy()
+
+    for k in ("calcflow", "calcinp", "runall", "runmodel"):
+        loader_cfg["flags"][k] = False
+
+    pkg = run_bc_system(loader_cfg, system_name)
+
+    bc = pkg["bc"]
+    timeseries = pkg["timeseries"]
+
+    # --------------------------------------------------
+    # Iteration logging
+    # --------------------------------------------------
+    history = []
+
+    def iter_logger(params, obj):
+        history.append(
+            {
+                "time_s": time.time() - t0,
+                "objective": obj,
+                **{p: v for p, v in zip(paramnames, params)},
+            }
+        )
+
+    # --------------------------------------------------
+    # Run calibration
+    # --------------------------------------------------
+    res = bc.calibrate_flows(
+        timeseries=timeseries,
+        paramnames=paramnames,
+        param0s=param0s,
+        bounds=bounds,
+        solver=solver,
+        method=solver_method,
+        tol=tol,
+        solver_kwargs=solver_kwargs,
+        iter_logger=iter_logger,
+    )
+
+    # --------------------------------------------------
+    # Write calibrated params (Option A)
+    # --------------------------------------------------
+    params_cal = bc.params.copy()
+    for i, pname in enumerate(paramnames):
+        params_cal.loc[pname, "val"] = res.x[i]
+
+    out_dir = Path(output_dir or config["paths"]["pickle_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    params_path = out_dir / f"params_columns_calibrated_flow_{system_name}_{tag}.csv"
+
+    params_cal.to_csv(params_path)
+    # --------------------------------------------------
+    # Save iteration history
+    # --------------------------------------------------
+    hist_df = pd.DataFrame(history)
+    hist_path = out_dir / f"flow_calibration_history_{system_name}_{tag}.csv"
+    hist_df.to_csv(hist_path, index=False)
+
+    # --------------------------------------------------
+    # Re-run forward model (with calibrated params)
+    # --------------------------------------------------
+    forward_results = None
+    if save_forward_run:
+        fwd_cfg = config.copy()
+        fwd_cfg["paths"] = fwd_cfg["paths"].copy()
+        fwd_cfg["paths"]["params_xlsx"] = str(params_path)
+
+        forward_results = run_bc_system(fwd_cfg, system_name)
+
+    return {
+        "system": system_name,
+        "solver": solver,
+        "result": res,
+        "params_path": params_path,
+        "history_path": hist_path,
+        "history": hist_df,
+        "forward_results": forward_results,
+        "runtime_s": time.time() - t0,
+    }
+
+
+def optBC_flow_objective(
+    param,
+    bc,
+    timeseries,
+    paramnames,
+):
+    if (param < 0).any():
+        return 999.0
+
+    paramtest = bc.params.copy()
+    locsummtest = bc.locsumm.copy()
+
+    for i, pname in enumerate(paramnames):
+        paramtest.loc[pname, "val"] = param[i]
+        if pname == "native_depth":
+            locsummtest.loc["native_soil", "Depth"] = param[i]
+
+    flowtest = bc.flow_time(
+        locsummtest, paramtest, ["water", "subsoil"], timeseries
+    )
+
+    timeseries = timeseries.copy()
+    timeseries["Q_drainout"] = flowtest.loc[
+        (slice(None), "drain"), "Q_todrain"
+    ].values
+
+    eff = hydroeval.evaluator(
+        kge,
+        timeseries.loc[timeseries.time > 0, "Q_drainout"].values,
+        timeseries.loc[timeseries.time > 0, "Qout_meas"].values,
+    )
+
+    return abs(1.0 - eff[0])[0]
+
+    
+    
+    
+    
+    
+  
