@@ -82,6 +82,23 @@ def df_sliced_index(df):
         rows.append(row)
     return pd.DataFrame(data=rows, index=pd.MultiIndex.from_tuples(new_index))
 
+def slice_timeseries(timeseries, tstart=None, tend=None):
+    """
+    Slice timeseries by time column, preserving index consistency.
+    """
+    if tstart is None and tend is None:
+        return timeseries
+
+    mask = pd.Series(True, index=timeseries.index)
+
+    if tstart is not None:
+        mask &= timeseries["time"] >= tstart
+
+    if tend is not None:
+        mask &= timeseries["time"] <= tend
+
+    return timeseries.loc[mask].reset_index(drop=True).copy()
+
 #Find nearest value, used to find the index of a specific time
 #Source: https://stackoverflow.com/questions/2566412/find-nearest-value-in-numpy-array
 def find_nearest(array,value):
@@ -261,3 +278,8 @@ def make_input_timeseries(
             res[col] = res[col].clip(lower=0)
 
     return res
+
+
+def load_column_params(xlsx_path, sheet):
+    """Load a single sheet corresponding to one soil column."""
+    return pd.read_excel(xlsx_path, sheet_name=sheet)

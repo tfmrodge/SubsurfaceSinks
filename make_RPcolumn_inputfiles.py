@@ -56,6 +56,7 @@ def build_soil_column_tables(dict_of_excel_sheets, colnames):
         EC_sub = df_EC[['time', col]].rename(columns={col: 'EC_uS'})
         pH_sub = df_pH[['time', col]].rename(columns={col: 'pH'})
         Br_sub = df_Br[['time', col]].rename(columns={col: 'C_Br_mg_L'})
+        t0_tracertest = Br_sub['time'].min()
 
         fr_col = f"{col}_flow_ml_min"
         Q_sub  = df_Q[['time', fr_col]].rename(columns={fr_col: 'FlowRate_ml_min'})
@@ -67,7 +68,7 @@ def build_soil_column_tables(dict_of_excel_sheets, colnames):
         ]).unique()
         
         
-        for df_param in [T_sub, DO_sub, EC_sub, pH_sub, Q_sub]:
+        for df_param in [T_sub, DO_sub, EC_sub, pH_sub, Q_sub, Br_sub]:
             for c in df_param.columns:
                     df_param[c] = pd.to_numeric(df_param[c], errors='coerce')
                 
@@ -85,6 +86,8 @@ def build_soil_column_tables(dict_of_excel_sheets, colnames):
         df = df.merge(pH_sub, on='time', how='left')
         df = df.merge(Q_sub,  on='time', how='left')
         df = df.merge(Br_sub,  on='time', how='left')
+        #Fill 0 before tracer test for  Br to prevent interp error downstream
+        df.loc[df.time<t0_tracertest,'C_Br_mg_L'] = 0.
 
         soil_raw[col] = df
 
@@ -148,8 +151,8 @@ def build_model_ready_timeseries(
         # Identify chemical columns to interpolate and enforce non-negativity
         chem_cols = [c for c in df.columns if c.endswith("_Cout") or c.endswith("_Cin")]
 
-        interp_cols = ["FlowRate_m3_hr", "T_C", "pH", "EC_uS", "DO_mg_L"] + chem_cols
-        nonneg_cols = ["FlowRate_m3_hr", "EC_uS", "DO_mg_L"] + chem_cols
+        interp_cols = ["FlowRate_m3_hr", "T_C", "pH", "EC_uS", "DO_mg_L", 'C_Br_mg_L'] + chem_cols
+        nonneg_cols = ["FlowRate_m3_hr", "EC_uS", "DO_mg_L", 'C_Br_mg_L'] + chem_cols
 
         # Interpolate using Stage-2
         df_interp = make_input_timeseries(
@@ -176,7 +179,7 @@ def build_model_ready_timeseries(
 
         # Add chemicals (auto)
         for chemcol in chem_cols:
-            model_df[f"{chemcol}_mg_L"] = df_interp[chemcol]
+            model_df[f"{chemcol}"] = df_interp[chemcol]
 
         # store output
         model_ts[soilcol] = model_df
@@ -327,64 +330,91 @@ def load_chemical_sheets(
 
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 codetime = time.time()
-pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'
-#For the vancouver tree trench, no ponding zone. 
-#numc = ['water', 'subsoil','topsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air']
-numc = ['water', 'subsoil','rootbody', 'rootxylem', 'rootcyl','shoots', 'air','pond']
-#locsumm = pd.read_excel('inputfiles/QuebecSt_TreeTrench.xlsx',index_col = 0)
-locsumm = pd.read_excel('inputfiles/RPColumns/RPColumn_BC.xlsx',index_col = 0)
-#chemsumm = pd.read_excel('inputfiles/Pine8th/EngDesign_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = pd.read_excel('inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',index_col = 0)
-chemsumm = chemsumm.dropna(how='all')
-#Change to episuite version
-#chemsumm.loc['6PPDQ','LogKocW'] = 3.928
-#chemsumm.loc['Rhodamine','chemcharge'] = 0
-#chemsumm = pd.read_excel('inputfiles/Kortright_ALL_CHEMSUMM.xlsx',index_col = 0)
-params =  pd.read_excel('inputfiles/RPColumns/params_columns.xlsx',index_col = 0)
-#params.loc['f_apo','val'] = 0
-pp = None
-#testing the model
-ref_timeseries = pd.read_excel('inputfiles/RPColumns/timeseries_ref.xlsx')
-coldata = pd.read_excel('inputfiles/RPColumns/AllMeasurements.xlsx', sheet_name=None)
+#Make timeseries inputs
 colnames = ['A','B','C','P','Q','R','X','Y','Z']
-chems=['6PPD', '6PPD-Q', 'CBZ', 'BTZ', 'SFX', 'FIP', 'HMMM', 'CAFF']
-MDLdict={'6PPD':0, '6PPD-Q':0, 'CBZ':0, 'BTZ':0, 
-         'SFX':0, 'FIP':0, 'HMMM':0, 'CAFF':0}
-# Unified mapping dictionary
-var_map = {
-    "Qin":        {"source": "interp", "column": "FlowRate_m3_hr"},
-    "Qout_meas":  {"source": "interp", "column": "FlowRate_m3_hr"},
-
-    "Tair":       {"source": "interp", "column": "T_C"},
-    "Twater":     {"source": "interp", "column": "T_C"},
-    "Tsubsoil":   {"source": "interp", "column": "T_C"},
-
-    "pHwater":    {"source": "interp", "column": "pH"},
-    "pHsubsoil":  {"source": "interp", "column": "pH"},
-
-    "Condwater":  {"source": "interp", "column": "EC_uS"},
-    "DO_mgL":     {"source": "interp", "column": "DO_mg_L"},
+make_timeseries=True
+if make_timeseries:
+    ref_timeseries = pd.read_excel('inputfiles/RPColumns/timeseries_ref.xlsx')
+    coldata = pd.read_excel('inputfiles/RPColumns/AllMeasurements.xlsx', sheet_name=None)
+    chems=['6PPD', '6PPD-Q', 'CBZ', 'BTZ', 'SFX', 'FIP', 'HMMM', 'CAFF']
+    MDLdict={'6PPD':0, '6PPD-Q':0, 'CBZ':0, 'BTZ':0, 
+             'SFX':0, 'FIP':0, 'HMMM':0, 'CAFF':0}
+    # Unified mapping dictionary
+    var_map = {
+        "Qin":        {"source": "interp", "column": "FlowRate_m3_hr"},
+        "Qout_meas":  {"source": "interp", "column": "FlowRate_m3_hr"},
     
-
-    "RainRate":   {"source": "ref", "column": "RainRate"},
-    "WindSpeed":  {"source": "ref", "column": "WindSpeed"},
-    "RH":         {"source": "ref", "column": "RH"},
-    "fvalveopen": {"source": "ref", "column": "fvalveopen"},
-}
-#Build the parameter dataframes by soil column
-soil_raw = build_soil_column_tables(coldata,colnames)
-chem_raw = load_chemical_sheets(coldata, chems, colnames,MDLdict,treat_pre_detection_as_zero=True)
-#Build the timeseries dataframes
-dt = 5/60 #hrs
-time_bnds = [soil_raw['A'].time.min(),soil_raw['A'].time.max()]
-time_col = 'time'
-model_ts = build_model_ready_timeseries(soil_raw,chem_raw,df_ref=ref_timeseries,
-            dt=dt,time_bnds=time_bnds,time_col=time_col,var_map = var_map)
-#Save model timeseries as an excel worksbook with one sheet per column
-#outpth = 'inputfiles/RPCol_InputTimeseries.xlsx'
-for soilcol, df in model_ts.items():
-    outname = f"inputfiles/RPColumns/InputTimeseries_{soilcol}.csv"
-    df.to_csv(outname, index=False)
+        "Tair":       {"source": "interp", "column": "T_C"},
+        "Twater":     {"source": "interp", "column": "T_C"},
+        "Tsubsoil":   {"source": "interp", "column": "T_C"},
+    
+        "pHwater":    {"source": "interp", "column": "pH"},
+        "pHsubsoil":  {"source": "interp", "column": "pH"},
+    
+        "Condwater":  {"source": "interp", "column": "EC_uS"},
+        "DO_mgL":     {"source": "interp", "column": "DO_mg_L"},
+        "Bromide_Coutmeas":{"source": "interp", "column": 'C_Br_mg_L'},
+        
+    
+        "RainRate":   {"source": "ref", "column": "RainRate"},
+        "WindSpeed":  {"source": "ref", "column": "WindSpeed"},
+        "RH":         {"source": "ref", "column": "RH"},
+        "fvalveopen": {"source": "ref", "column": "fvalveopen"},
+    }
+    #Build the parameter dataframes by soil column
+    soil_raw = build_soil_column_tables(coldata,colnames)
+    chem_raw = load_chemical_sheets(coldata, chems, colnames,MDLdict,treat_pre_detection_as_zero=True)
+    #Build the timeseries dataframes
+    dt = 5/60 #hrs
+    time_bnds = [soil_raw['A'].time.min(),soil_raw['A'].time.max()]
+    time_col = 'time'
+    model_ts = build_model_ready_timeseries(soil_raw,chem_raw,df_ref=ref_timeseries,
+                dt=dt,time_bnds=time_bnds,time_col=time_col,var_map = var_map)
+    #Save model timeseries as an excel worksbook with one sheet per column
+    #outpth = 'inputfiles/RPCol_InputTimeseries.xlsx'
+    for soilcol, df in model_ts.items():
+        #Add bromide spike as Br_Min and increase flow 
+        #Spke = 100 mL * 2 mg/L = 2mg = 2e-3g
+        #100mL*10e-6m3/mL/dt = additional Q from spike
+        t_Br_spike = 1488.5 #hrs June 10 2024 1430
+        df.loc[:,'Bromide_Min'] = 0.
+        df.loc[df.time==t_Br_spike,'Bromide_Min'] = 2e-3
+        df.loc[df.time==t_Br_spike,'Qin'] += 1e-4/dt
+        outname = f"inputfiles/RPColumns/InputTimeseries_{soilcol}.csv"
+        df.to_csv(outname, index=False)
+make_bcsumm = False
+if make_bcsumm:
+    bc_ref= pd.read_excel('inputfiles/RPColumns/RPColumn_BC.xlsx',sheet_name = 'ref',index_col = 0)
+    bc_dims = pd.read_excel('inputfiles/RPColumns/RPColumn_BC.xlsx',sheet_name = 'DimCalcs',index_col = 0)
+    bc_params = pd.read_excel('inputfiles/RPColumns/params_columns.xlsx',sheet_name = 'ref',index_col = 0)
+    save_bcsumm = True
+    BCSUMMS = {}
+    BCPARAMS = {}
+    for soilcol in colnames:
+        #All columns have same area, depth, etc (can change later to match settling?)
+        #Column-specific parameters are biochar fraction,  gravel porosity, soil organic matter, soil porosity
+        bc_params_col = bc_params.copy()
+        rho_biochar = 1500*0.453592/1.91 #kg/m3 "1500 lbs/1910 L" - phone call with Canadian Agri-char
+        V_biochar = bc_dims.loc['mass_biochar_kg',soilcol]/rho_biochar #m3 biochar
+        bc_params_col.loc['famendment','val'] = V_biochar/bc_dims.loc['Volume of Soil Layer',soilcol] #volume fraction m3/m3
+        #print(f"Col {col} has volume-fraction {V_biochar/bc_dims.loc['Volume of Soil Layer',col]} biochar")
+        #Rest is in the locsumm file
+        BCSUMM_col = bc_ref.copy()
+        BCSUMM_col.loc['subsoil','Porosity'] = bc_dims.loc['Soil Layer Porosity_calc',soilcol]
+        BCSUMM_col.loc['subsoil','FrnOC'] = bc_dims.loc['soil_organic_matter',soilcol] #Treating biochar as totally separate/not counting as OC
+        BCSUMM_col.loc['drain','Porosity'] = bc_dims.loc['Gravel_porosity_use',soilcol] 
+        #Save in dicts
+        BCSUMMS[soilcol] = BCSUMM_col
+        BCPARAMS[soilcol] = bc_params_col
+        #Save to CSV
+        if save_bcsumm:
+            BCSUMMname = f"inputfiles/RPColumns/BCSUMM_{soilcol}.csv"
+            BCSUMM_col.to_csv(BCSUMMname)
+            PARAMname = f"inputfiles/RPColumns/PARAMS_{soilcol}.csv"
+            bc_params_col.to_csv(PARAMname)
+        
+        
+    
 
 
 
