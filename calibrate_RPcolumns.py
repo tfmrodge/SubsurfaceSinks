@@ -11,21 +11,22 @@ import pdb
 from datetime import datetime
 import os
 
+import sys
+import argparse
+
 from joblib import Parallel, delayed 
 
-#Testing the model
-#Load parameterization files
-pdb.set_trace()
+#pdb.set_trace()
 
 CONFIG = {
     "colnames": ['A','B','C','P','Q','R','X','Y','Z'],
 
     "paths": {
         "timeseries_dir": 'inputfiles/RPColumns/',
-        "locsumm_xlsx":  'inputfiles/RPColumns/RPColumn_BC.xlsx',
-        "chemsumm_xlsx": 'inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',
-        "params_xlsx":   'inputfiles/RPColumns/params_columns.xlsx',
-        "pickle_dir":    "D:/OneDrive - UBC/Postdoc/Completed Projects/6PPD_BC Papers/Modeling/Pickles/"
+        "locsumm_pth":  'inputfiles/RPColumns/RPColumn_BC.xlsx',
+        "chemsumm_pth": 'inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',
+        "params_pth":   'inputfiles/RPColumns/params_columns.xlsx',
+        "pickle_dir":    "/home/tfmrodge/scratch/RPColumns/Pickles/"
     },
 
     "flags": {
@@ -51,8 +52,9 @@ CONFIG = {
     "timeslice": {
             # units assumed to be same as timeseries.time (e.g. hours)
             # Use None to disable slicing on either end
-            "tstart": 1487.5,   # 1000
-            "tend": 1568.5      # 1575
+            None
+            #"tstart": 0,   # 1000
+            #"tend": 1700      # 1575
         },
 
 
@@ -83,17 +85,46 @@ CONFIG = {
         },
 
 }
+
+parser = argparse.ArgumentParser(
+    description="Calibrate BCBlues flow model for a single RP column."
+)
+
+parser.add_argument(
+    "system_index",
+    type=int,
+    help="Column index (1=A, 2=B, 3=C, ...)"
+)
+
+args = parser.parse_args()
+
+
 cal_flows = True
 today = 20260330 #datetime.today().strftime("%Y%m%d")
-n_workers = 1 #os.cpu_count() -5
-sysname = CONFIG['colnames'][0]
+n_workers = -1 #os.cpu_count() -5
+TARGET='bias'
+
+# 1-based index → 0-based Python index
+idx = args.system_index - 1
+
+if idx < 0 or idx >= len(CONFIG["colnames"]):
+    raise ValueError(
+        f"System index {args.system_index} out of range. "
+        f"Must be between 1 and {len(CONFIG['colnames'])}."
+    )
+
+sysname = CONFIG["colnames"][idx]
+
+print(f"Running flow calibration for system {sysname} (index {args.system_index})")
+
 if cal_flows:
     out = calibrate_flow_system(
         CONFIG,
         system_name=sysname,
-        paramnames=["Ks"],
-        param0s=[0.2],
-        bounds=[(1e-5, 1)],
+        paramnames=["Kf","Ks"],
+        target=TARGET,
+        param0s=[0.2,0.2],
+        bounds=[(1e-5, 1),(1e-5, 1)],
         solver="differential_evolution",
         solver_kwargs={
             "workers": n_workers,
@@ -105,4 +136,10 @@ if cal_flows:
         },
         suffix=f"testing_{today}",
     )
-
+    forward_results = out["forward_results"]
+    flow_time = forward_results['flow_time']
+    outpth = f"{CONFIG['paths']['pickle_dir']}20260331_testRPcalout_{sysname}.csv"
+    flow_time.to_csv(outpth)
+    outfig = f"{CONFIG['paths']['pickle_dir']}20260331_testRPcalout_{sysname}.jpg"
+    flow_fig = forward_results['flow_fig']
+    flow_fig.savefig(outfig)

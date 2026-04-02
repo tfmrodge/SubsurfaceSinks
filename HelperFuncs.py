@@ -283,3 +283,51 @@ def make_input_timeseries(
 def load_column_params(xlsx_path, sheet):
     """Load a single sheet corresponding to one soil column."""
     return pd.read_excel(xlsx_path, sheet_name=sheet)
+
+from pathlib import Path
+import pandas as pd
+import zipfile
+
+def load_infile(path, **kwargs):
+    """
+    Load a data file based on its extension.
+
+    Supported:
+      - .csv   -> pd.read_csv
+      - .xlsx  -> pd.read_excel (openpyxl)
+      - .xls   -> pd.read_excel (xlrd)
+      - .pkl   -> pd.read_pickle
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to input file
+    **kwargs :
+        Passed through to the pandas reader
+
+    Returns
+    -------
+    pandas.DataFrame
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    suffix = path.suffix.lower()
+    
+    if suffix == ".csv":
+        kwargs.pop("sheet_name", None)
+        return pd.read_csv(path, **kwargs)
+
+    elif suffix == ".xlsx":
+        return pd.read_excel(path, engine="openpyxl", **kwargs)
+
+    elif suffix == ".xls":
+        return pd.read_excel(path, engine="xlrd", **kwargs)
+
+    elif suffix == ".pkl":
+        return pd.read_pickle(path, **kwargs)
+
+    else:
+        raise ValueError(f"Unsupported file type: {suffix}")
