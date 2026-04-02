@@ -7,7 +7,7 @@ Created on Tue Jul  9 10:52:52 2019
 
 from FugModel import FugModel #Import the parent FugModel class
 from Subsurface_Sinks import SubsurfaceSinks
-from HelperFuncs import df_sliced_index, slice_timeseries #Import helper functions
+from HelperFuncs import df_sliced_index, slice_timeseries, load_infile #Import helper functions
 from scipy import optimize
 import numpy as np
 import pandas as pd
@@ -1153,6 +1153,7 @@ class BCBlues(SubsurfaceSinks):
         self,
         timeseries,
         paramnames,
+        target,
         param0s,
         bounds,
         *,
@@ -1195,7 +1196,7 @@ class BCBlues(SubsurfaceSinks):
                 method=method,
                 bounds=bounds,
                 tol=tol,
-                args=(self, timeseries, paramnames),
+                args=(self, timeseries, paramnames, target),
                 options=solver_kwargs,
             )
     
@@ -1203,7 +1204,7 @@ class BCBlues(SubsurfaceSinks):
             res = differential_evolution(
                 optBC_flow_objective,
                 bounds=bounds,
-                args=(self, timeseries, paramnames),
+                args=(self, timeseries, paramnames, target),
                 **solver_kwargs,
             )
     
@@ -1212,7 +1213,7 @@ class BCBlues(SubsurfaceSinks):
                 f"Unknown solver '{solver}'. "
                 "Use 'minimize' or 'differential_evolution'."
             )
-    
+        print(res)
         return res
 
     def calibrate_tracer(
@@ -1529,37 +1530,47 @@ def run_bc_system(config, system_name):
     # ------------------------------------
     # Load timeseries (backwards compatible)
     # ------------------------------------
-    ts_csv = Path(paths["timeseries_dir"]) / f"InputTimeseries_{system_name}.csv"
-    ts_xlsx = Path(paths["timeseries_dir"]) / "InputTimeseries.xlsx"
-    ts_pkl = Path(paths["timeseries_dir"]) / f"InputTimeseries_{system_name}.pkl"
-
-    if ts_csv.exists():
-        timeseries = pd.read_csv(ts_csv)
-    elif ts_pkl.exists():
-        timeseries = pd.read_pickle(ts_pkl)
-    elif ts_xlsx.exists():
-        timeseries = pd.read_excel(ts_xlsx, sheet_name=system_name)
+    ts_dir = Path(paths["timeseries_dir"])
+    ts_files = [
+        ts_dir / f"InputTimeseries_{system_name}.csv",
+        ts_dir / f"InputTimeseries_{system_name}.pkl",
+        ts_dir / "InputTimeseries.xlsx",
+    ]
+    for f in ts_files:
+        if f.exists():
+            timeseries = load_infile(
+                f,
+                sheet_name=system_name if f.suffix in {".xlsx", ".xls"} else None
+            )
+            break
     else:
         raise FileNotFoundError(f"No timeseries found for system {system_name}")
-        
-    
     ts_cfg = config.get("timeslice", {})
+    if not isinstance(ts_cfg, dict):
+        tstart = None
+        tend = None
+    else:
+        tstart = ts_cfg.get("tstart")
+        tend = ts_cfg.get("tend")
     timeseries = slice_timeseries(
-            timeseries,
-            tstart=ts_cfg.get("tstart", None),
-            tend=ts_cfg.get("tend", None))
+        timeseries,
+        tstart=tstart,
+        tend=tend
+    )
+
 
 
     # ------------------------------------
     # Load system‑specific sheets
     # ------------------------------------
-    locsumm  = pd.read_excel(paths["locsumm_xlsx"],  sheet_name=system_name,index_col = 0)
-    params   = pd.read_excel(paths["params_xlsx"],   sheet_name=system_name,index_col = 0)
+    
+    locsumm = load_infile(paths["locsumm_pth"],sheet_name=system_name,index_col=0)
+    params = load_infile(paths["params_pth"],sheet_name=system_name,index_col = 0)
     if flags["pulse"]:
         params.loc['Pulse','val'] = 1
     else:
         params.loc['Pulse','val'] = 0
-    chemsumm = pd.read_excel(paths["chemsumm_xlsx"],index_col = 0) #Chemsumm same for all systems
+    chemsumm = load_infile(paths["chemsumm_pth"],index_col = 0) #Chemsumm same for all systems
     #Filter chemsumm to runchems
     if model_cfg["run_chems"]:
         chemsumm = chemsumm[chemsumm.index.isin(model_cfg["run_chems"])]
@@ -1609,6 +1620,7 @@ def run_bc_system(config, system_name):
     hydro_cfg = config.get("hydrology_plot", {})
     KGE_hydro = None
     inf_pct = None
+    flow_fig = None
 
     if hydro_cfg.get("enable", False) and flow_time is not None:
 
@@ -1641,7 +1653,7 @@ def run_bc_system(config, system_name):
 
             # ---- Plot logic ----
             if is_plot_all(windows): 
-                bc.plot_flows(
+                flow_fig = bc.plot_flows(
                     flow_time,
                     Qmeas=timeseries.loc[timeseries.time >= 0, 'Qout_meas'],
                     compartments=comps,
@@ -1649,6 +1661,7 @@ def run_bc_system(config, system_name):
                 )
 
             else:
+                flow_fig = {}
                 for t0, t1 in windows:
                     if t0 is None:
                         t0 = flow_time.time.min()
@@ -1657,7 +1670,7 @@ def run_bc_system(config, system_name):
 
                     mask = (flow_time.time >= t0) & (flow_time.time <= t1)
 
-                    bc.plot_flows(
+                    flow_fig[f"{t0}_{t1}"] = bc.plot_flows(
                         flow_time.loc[mask],
                         Qmeas=timeseries.loc[
                             (timeseries.time >= t0) & (timeseries.time <= t1),
@@ -1759,6 +1772,7 @@ def run_bc_system(config, system_name):
         "chemsumm": chemsumm,
         "timeseries": timeseries,
         "flow_time": flow_time,
+        "flow_fig": flow_fig,
         "input_calcs": input_calcs,
         "res": res,
         "mass_flux": mass_flux,
@@ -1776,6 +1790,7 @@ def calibrate_flow_system(
     system_name,
     *,
     paramnames,
+    target='kge',
     param0s,
     bounds,
     solver="differential_evolution",
@@ -1864,6 +1879,7 @@ def calibrate_flow_system(
     res = bc.calibrate_flows(
         timeseries=timeseries,
         paramnames=paramnames,
+        target=target,
         param0s=param0s,
         bounds=bounds,
         solver=solver,
@@ -1921,9 +1937,27 @@ def optBC_flow_objective(
     bc,
     timeseries,
     paramnames,
+    target="kge",   # "bias" or "kge"
 ):
+    """
+    Objective function for flow calibration.
+
+    Targets either:
+      - relative bias in mean flow (steady / quasi-steady systems), or
+      - KGE (dynamic systems).
+
+    RMSE should be computed separately for reporting.
+    """
+
+    BIG_PENALTY = 1e9
+
+    # --------------------------------------------------
+    # Parameter sanity checks
+    # --------------------------------------------------
+    if not np.all(np.isfinite(param)):
+        return BIG_PENALTY
     if (param < 0).any():
-        return 999.0
+        return BIG_PENALTY
 
     paramtest = bc.params.copy()
     locsummtest = bc.locsumm.copy()
@@ -1933,26 +1967,72 @@ def optBC_flow_objective(
         if pname == "native_depth":
             locsummtest.loc["native_soil", "Depth"] = param[i]
 
+    # --------------------------------------------------
+    # Run model
+    # --------------------------------------------------
     flowtest = bc.flow_time(
-        locsummtest, paramtest, ["water", "subsoil"], timeseries
+        locsummtest,
+        paramtest,
+        ["water", "subsoil"],
+        timeseries
     )
 
-    timeseries = timeseries.copy()
-    timeseries["Q_drainout"] = flowtest.loc[
-        (slice(None), "drain"), "Q_todrain"
+    ts = timeseries.copy()
+    ts["Q_drainout"] = flowtest.loc[
+        (slice(None), "drain"),
+        "Q_todrain"
     ].values
 
-    eff = hydroeval.evaluator(
-        kge,
-        timeseries.loc[timeseries.time > 0, "Q_drainout"].values,
-        timeseries.loc[timeseries.time > 0, "Qout_meas"].values,
-    )
+    sim = ts.loc[ts.time > 0, "Q_drainout"].values
+    obs = ts.loc[ts.time > 0, "Qout_meas"].values
 
-    return abs(1.0 - eff[0])[0]
+    # --------------------------------------------------
+    # Physical validity checks
+    # --------------------------------------------------
+    if not np.all(np.isfinite(sim)):
+        return BIG_PENALTY
+    if np.min(sim) < 0.0 or np.min(obs) < 0.0:
+        return BIG_PENALTY
 
-    
-    
-    
-    
-    
-  
+    mean_sim = np.mean(sim)
+    mean_obs = np.mean(obs)
+
+    if mean_obs <= 0.0:
+        return BIG_PENALTY
+
+    # --------------------------------------------------
+    # Target: RELATIVE BIAS (steady / quasi-steady)
+    # --------------------------------------------------
+    #print(target)
+    if target == "bias":
+        bias = mean_sim / mean_obs
+        return abs(bias - 1.0)
+
+    # --------------------------------------------------
+    # Target: KGE (dynamic systems only)
+    # --------------------------------------------------
+    elif target == "kge":
+
+        # Relative variance (CV) guards
+        rel_var_thresh = 1e-5
+
+        cv_sim = np.std(sim) / mean_sim
+        cv_obs = np.std(obs) / mean_obs
+
+        # If near-steady, KGE is ill-conditioned
+        if cv_sim < rel_var_thresh or cv_obs < rel_var_thresh:
+            return BIG_PENALTY
+
+        # Compute KGE safely
+        kge_val = hydroeval.evaluator(kge, sim, obs)[0][0]
+
+        if not np.isfinite(kge_val):
+            return BIG_PENALTY
+
+        # Safety clip to avoid optimizer pathologies
+        kge_val = np.clip(kge_val, -5.0, 1.0)
+
+        return abs(1.0 - kge_val)
+
+    else:
+        raise ValueError(f"Unknown calibration target: {target}")

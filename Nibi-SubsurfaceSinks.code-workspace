@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "SubsurfaceSinks",
+			"path": "."
+		},
+		{
+			"name": "scratch",
+			"path": "../../../scratch"
+		}
+	],
+	"settings": {}
+}
