@@ -6,7 +6,7 @@ Updated from previous script with the help of M365 Copilot
 @author: Tim Rodgers
 """
 #This is the name of the python module containing the Bioretention Blues submodel.
-from BioretentionBlues import BCBlues, calibrate_flow_system
+from BioretentionBlues import BCBlues, calibrate_flow_system, calibrate_tracer_system
 import pdb
 from datetime import datetime
 import os
