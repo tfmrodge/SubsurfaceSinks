@@ -6,7 +6,7 @@ Updated from previous script with the help of M365 Copilot
 @author: Tim Rodgers
 """
 #This is the name of the python module containing the Bioretention Blues submodel.
-from BioretentionBlues import BCBlues, calibrate_flow_system
+from BioretentionBlues import BCBlues, calibrate_flow_system, calibrate_tracer_system
 import pdb
 from datetime import datetime
 import os
@@ -51,9 +51,9 @@ CONFIG = {
     "timeslice": {
             # units assumed to be same as timeseries.time (e.g. hours)
             # Use None to disable slicing on either end
-            None
-            #"tstart": 0,   # 1000
-            #"tend": 1700      # 1575
+            #None
+            "tstart": 1000,   # 1000
+            "tend": 1575     # 1575
         },
 
 
@@ -84,7 +84,20 @@ CONFIG = {
         },
 
 }
+pdb.set_trace()
 
+#Universal config
+today = 20260407 #datetime.today().strftime("%Y%m%d")
+n_workers = 2 #-1 #os.cpu_count() -5
+man_idx = 1
+#Flow cal config
+cal_flows =False
+TARGET_HYDRO='bias'
+#Tracer cal config
+cal_tracer = True
+TARGET_TRACER='kge'
+
+#Parse arguments
 parser = argparse.ArgumentParser(
     description="Calibrate BCBlues flow model for a single RP column."
 )
@@ -92,19 +105,19 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "system_index",
     type=int,
+    nargs="?",          # <-- makes it optional
+    default=None,
     help="Column index (1=A, 2=B, 3=C, ...)"
 )
-
 args = parser.parse_args()
 
-
-cal_flows = True
-today = 20260330 #datetime.today().strftime("%Y%m%d")
-n_workers = -1 #os.cpu_count() -5
-TARGET='bias'
-
 # 1-based index → 0-based Python index
-idx = args.system_index - 1
+if args.system_index is None:
+    idx = man_idx - 1
+    print(f"No argument given; running for index {man_idx}")
+else:
+    idx = args.system_index - 1
+
 
 if idx < 0 or idx >= len(CONFIG["colnames"]):
     raise ValueError(
@@ -115,13 +128,13 @@ if idx < 0 or idx >= len(CONFIG["colnames"]):
 sysname = CONFIG["colnames"][idx]
 
 print(f"Running flow calibration for system {sysname} (index {args.system_index})")
-
+flow_time = None
 if cal_flows:
     out = calibrate_flow_system(
         CONFIG,
         system_name=sysname,
         paramnames=["Kf","Ks"],
-        target=TARGET,
+        target=TARGET_HYDRO,
         param0s=[0.2,0.2],
         bounds=[(1e-5, 1),(1e-5, 1)],
         solver="differential_evolution",
@@ -142,3 +155,43 @@ if cal_flows:
     outfig = f"{CONFIG['paths']['pickle_dir']}20260331_testRPcalout_{sysname}.jpg"
     flow_fig = forward_results['flow_fig']
     flow_fig.savefig(outfig)
+
+if cal_tracer:
+    tracer_out = calibrate_tracer_system(
+        CONFIG,
+        system_name=sysname,
+
+        # ---- tracer parameters to calibrate ----
+        paramnames=["alpha", "Kf","thetam"],   
+        param0s=[1, 0.2,0.2],
+        bounds=[(1e-4, 50), (1e-4, 10), (1e-4, 9.9999e-1)],
+
+        # ---- objective ----
+        target=TARGET_TRACER,
+        objective=None, #Use to set a recovery value e.g. 0.7 proportion recovered
+
+        #Reuse flows if needed.
+        flows=flow_time,
+
+        solver="differential_evolution",
+        solver_method="L-BFGS-B", #
+        solver_kwargs={
+            "workers": n_workers,
+            "updating": "deferred",
+            "maxiter": 50,
+            "disp": True,
+        },
+
+        prefix="tracer",
+        suffix=f"{sysname}_{today}",
+        output_dir=CONFIG["paths"]["pickle_dir"],
+
+        save_forward_run=True,
+        plot_forward_run=True,
+    )
+
+    print(
+        f"Tracer calibration complete for system {sysname} "
+        f"(objective={tracer_out['result'].fun:.3g})"
+    )
+    

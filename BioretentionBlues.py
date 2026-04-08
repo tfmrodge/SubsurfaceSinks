@@ -22,6 +22,7 @@ import psutil
 from pathlib import Path
 from datetime import datetime
 import time
+from functools import partial
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 simplefilter(action="ignore", category= RuntimeWarning)
 simplefilter(action="ignore", category= FutureWarning)
@@ -1159,6 +1160,7 @@ class BCBlues(SubsurfaceSinks):
         *,
         solver="minimize",
         method="L-BFGS-B",
+        BIG_PENALTY = 1e9,
         tol=None,
         solver_kwargs=None,
         iter_logger=None,
@@ -1198,6 +1200,7 @@ class BCBlues(SubsurfaceSinks):
                 tol=tol,
                 args=(self, timeseries, paramnames, target),
                 options=solver_kwargs,
+                BIG_PENALTY=BIG_PENALTY
             )
     
         elif solver in ("de", "differential_evolution"):
@@ -1206,6 +1209,7 @@ class BCBlues(SubsurfaceSinks):
                 bounds=bounds,
                 args=(self, timeseries, paramnames, target),
                 **solver_kwargs,
+                BIG_PENALTY=BIG_PENALTY
             )
     
         else:
@@ -1213,7 +1217,7 @@ class BCBlues(SubsurfaceSinks):
                 f"Unknown solver '{solver}'. "
                 "Use 'minimize' or 'differential_evolution'."
             )
-        print(res)
+        #print(res)
         return res
 
     def calibrate_tracer(
@@ -1225,18 +1229,24 @@ class BCBlues(SubsurfaceSinks):
         *,
         flows=None,
         objective=None,
+        target="kge",
         solver="minimize",
         method="L-BFGS-B",
+        BIG_PENALTY=1e9,
         tol=None,
         solver_kwargs=None,
-        iter_logger=None,
-    ):
+        iter_logger=None,):
         """
         Tracer calibration with support for SciPy minimize or differential evolution.
     
         Parameters
         ----------
         solver : {"minimize", "differential_evolution", "de"}
+            Optimization backend.
+        target : {"kge", "recovery"}
+            Built-in objective target.
+        objective : dict or callable, optional
+            Legacy support (e.g., {"recovery": value}) or custom objective.
         solver_kwargs : dict
             Passed directly to solver.
         iter_logger : callable
@@ -1246,108 +1256,43 @@ class BCBlues(SubsurfaceSinks):
         if solver_kwargs is None:
             solver_kwargs = {}
     
-        # ----------------------------------
-        # objective function
-        # ----------------------------------
-        def optBC_tracer(param):
+        # --------------------------------------------------
+        # Backward compatibility mapping
+        # --------------------------------------------------
+        user_objective = None
+        target_local = target
     
-            if (np.asarray(param) < 0).any():
-                obj = 999.0
+        if objective is not None:
+            # Legacy recovery-style objective
+            if isinstance(objective, dict) and "recovery" in objective:
+                target_local = "recovery"
+                user_objective = objective
+            # Future extension: callable user objective
+            elif callable(objective):
+                user_objective = objective
             else:
-                paramtest = self.params.copy()
-                locsummtest = self.locsumm.copy()
-    
-                for i, pname in enumerate(paramnames):
-                    paramtest.loc[pname, "val"] = param[i]
-                    if pname == "native_depth":
-                        locsummtest.loc["native_soil", "Depth"] = param[i]
-    
-                # ----------------------------------
-                # FLOWS
-                # ----------------------------------
-                if flows is None:
-                    flow_time = self.flow_time(
-                        locsummtest,
-                        paramtest,
-                        ["water", "subsoil"],
-                        timeseries,
-                    )
-                    mask = timeseries.time >= 0
-                    minslice, maxslice = np.where(mask)[0][[0, -1]]
-                    flow_time = df_sliced_index(
-                        flow_time.loc[(slice(minslice, maxslice), slice(None)), :]
-                    )
-                else:
-                    flow_time = pd.read_pickle(flows)
-    
-                # ----------------------------------
-                # RUN TRANSPORT
-                # ----------------------------------
-                input_calcs = self.input_calc(
-                    locsummtest,
-                    self.chemsumm,
-                    paramtest,
-                    self.pp,
-                    self.numc,
-                    timeseries,
-                    flow_time=flow_time,
+                raise ValueError(
+                    "objective must be a dict with key 'recovery' or a callable"
                 )
-    
-                res = self.run_it(
-                    locsummtest,
-                    self.chemsumm,
-                    paramtest,
-                    self.pp,
-                    self.numc,
-                    timeseries,
-                    input_calcs=input_calcs,
-                )
-    
-                mass_flux = self.mass_flux(res, self.numc)
-    
-                # ----------------------------------
-                # OBJECTIVE
-                # ----------------------------------
-                if objective is None:
-                    Couts = self.conc_out(
-                        self.numc,
-                        timeseries,
-                        self.chemsumm,
-                        res,
-                        mass_flux,
-                    )
-    
-                    KGEs = []
-                    for chem in self.chemsumm.index:
-                        KGEs.append(
-                            hydroeval.evaluator(
-                                kge,
-                                np.asarray(Couts[f"{chem}_Coutest"]),
-                                np.asarray(Couts[f"{chem}_Coutmeas"]),
-                            )[0]
-                        )
-    
-                    eff = np.mean(KGEs)
-                    obj = 1.0 - eff
-    
-                else:
-                    recovery = (
-                        mass_flux.N_effluent.groupby(level=0).sum()
-                        / mass_flux.N_influent.groupby(level=0).sum()
-                    )
-                    obj = np.abs(objective["recovery"] - recovery)
-    
-            if iter_logger is not None:
-                iter_logger(np.asarray(param).copy(), obj)
-    
-            return obj
-    
-        # ----------------------------------
+            
+
+        objective_wrapper = partial(
+            optBC_tracer_objective,
+            bc=self,
+            timeseries=timeseries,
+            paramnames=paramnames,
+            target=target_local,
+            flows=flows,
+            user_objective=user_objective,
+            BIG_PENALTY=BIG_PENALTY,
+        )
+        
+        # --------------------------------------------------
         # SOLVER DISPATCH
-        # ----------------------------------
+        # --------------------------------------------------
         if solver == "minimize":
             res = minimize(
-                optBC_tracer,
+                objective_wrapper,
                 param0s,
                 method=method,
                 bounds=bounds,
@@ -1357,7 +1302,7 @@ class BCBlues(SubsurfaceSinks):
     
         elif solver in ("de", "differential_evolution"):
             res = differential_evolution(
-                optBC_tracer,
+                objective_wrapper,
                 bounds=bounds,
                 **solver_kwargs,
             )
@@ -1938,6 +1883,7 @@ def optBC_flow_objective(
     timeseries,
     paramnames,
     target="kge",   # "bias" or "kge"
+    BIG_PENALTY=1e9
 ):
     """
     Objective function for flow calibration.
@@ -1948,8 +1894,6 @@ def optBC_flow_objective(
 
     RMSE should be computed separately for reporting.
     """
-
-    BIG_PENALTY = 1e9
 
     # --------------------------------------------------
     # Parameter sanity checks
@@ -2036,3 +1980,412 @@ def optBC_flow_objective(
 
     else:
         raise ValueError(f"Unknown calibration target: {target}")
+        
+def optBC_tracer_objective(
+    param,
+    bc,
+    timeseries,
+    paramnames,
+    *,
+    target="kge",
+    flows=None,
+    user_objective=None,
+    BIG_PENALTY=1e9
+):
+    """
+    Objective function for tracer calibration.
+
+    Parameters
+    ----------
+    param : array-like
+        Parameter vector being optimized.
+    bc : BCBlues instance
+        Initialized model object.
+    timeseries : DataFrame
+        Input timeseries.
+    paramnames : list[str]
+        Names of parameters corresponding to `param`.
+    target : {"kge", "recovery"}, default "kge"
+        Built-in objective target.
+    flows : str or Path or DataFrame, optional
+        Precomputed flow_time (path to pickle or dataframe).
+        If None, flows are recomputed during evaluation.
+    user_objective : callable or dict, optional
+        Optional future extension hook.
+
+    Returns
+    -------
+    float
+        Objective value (lower is better).
+    """
+
+    # --------------------------------------------------
+    # Parameter sanity checks
+    # --------------------------------------------------
+    param = np.asarray(param)
+
+    if not np.all(np.isfinite(param)):
+        return BIG_PENALTY
+
+    if (param < 0).any():
+        return BIG_PENALTY
+
+    # --------------------------------------------------
+    # Parameter injection
+    # --------------------------------------------------
+    paramtest = bc.params.copy()
+    locsummtest = bc.locsumm.copy()
+
+    for i, pname in enumerate(paramnames):
+        if pname in paramtest.index:
+            paramtest.loc[pname, "val"] = param[i]
+            if pname == "native_depth":
+                locsummtest.loc["native_soil", "Depth"] = param[i]
+        else:
+            print(f"{pname} not in params, so calibration may not be doing anything!")
+    # --------------------------------------------------
+    # Flows
+    # --------------------------------------------------
+    try:
+        if flows is None:
+            flow_time = bc.flow_time(
+                locsummtest,
+                paramtest,
+                ["water", "subsoil"],
+                timeseries,
+            )
+
+            mask = timeseries.time >= 0
+            minslice, maxslice = np.where(mask)[0][[0, -1]]
+
+            flow_time = df_sliced_index(
+                flow_time.loc[(slice(minslice, maxslice), slice(None)), :]
+            )
+
+        else:
+            if isinstance(flows, (str, Path)):
+                flow_time = pd.read_pickle(flows)
+            else:
+                flow_time = flows.copy()
+
+    except Exception:
+        return BIG_PENALTY
+
+    # --------------------------------------------------
+    # Run transport
+    # --------------------------------------------------
+    try:
+        input_calcs = bc.input_calc(
+            locsummtest,
+            bc.chemsumm,
+            paramtest,
+            bc.pp,
+            bc.numc,
+            timeseries,
+            flow_time=flow_time,
+        )
+
+        res = bc.run_it(
+            locsummtest,
+            bc.chemsumm,
+            paramtest,
+            bc.pp,
+            bc.numc,
+            timeseries,
+            input_calcs=input_calcs,
+        )
+
+        mass_flux = bc.mass_flux(res, bc.numc)
+
+    except Exception:
+        return BIG_PENALTY
+
+    # --------------------------------------------------
+    # Objective dispatch
+    # --------------------------------------------------
+    # ---- Target: KGE (per compound, averaged)
+    if target == "kge":
+
+        try:
+            Couts = bc.conc_out(
+                bc.numc,
+                timeseries,
+                bc.chemsumm,
+                res,
+                mass_flux,
+            )
+
+            KGEs = []
+
+            for chem in bc.chemsumm.index:
+                sim = np.asarray(Couts[f"{chem}_Coutest"])
+                obs = np.asarray(Couts[f"{chem}_Coutmeas"])
+
+                if not np.all(np.isfinite(sim)) or not np.all(np.isfinite(obs)):
+                    return BIG_PENALTY
+
+                mean_sim = np.mean(sim)
+                mean_obs = np.mean(obs)
+
+                # Guard against near-steady / zero signals
+                if mean_sim <= 0 or mean_obs <= 0:
+                    return BIG_PENALTY
+
+                cv_sim = np.std(sim) / mean_sim
+                cv_obs = np.std(obs) / mean_obs
+
+                if cv_sim < 1e-6 or cv_obs < 1e-6:
+                    return BIG_PENALTY
+
+                kge_val = hydroeval.evaluator(kge, sim, obs)[0][0]
+
+                if not np.isfinite(kge_val):
+                    return BIG_PENALTY
+
+                # Clip to avoid optimizer instability
+                #kge_val = np.clip(kge_val, -5.0, 1.0)
+
+                KGEs.append(kge_val)
+
+            eff = np.mean(KGEs)
+            return abs(1.0 - eff)
+
+        except Exception:
+            return BIG_PENALTY
+
+    # ---- Target: recovery
+    elif target == "recovery":
+
+        try:
+            recovery = (
+                mass_flux.N_effluent.groupby(level=0).sum()
+                / mass_flux.N_influent.groupby(level=0).sum()
+            )
+
+            if user_objective is None:
+                raise ValueError(
+                    "Recovery objective requires user_objective={'recovery': value}"
+                )
+
+            obj_val = np.abs(user_objective["recovery"] - recovery)
+
+            if not np.all(np.isfinite(obj_val)):
+                return BIG_PENALTY
+
+            return np.mean(obj_val)
+
+        except Exception:
+            return BIG_PENALTY
+
+    # ---- Future extension
+    elif callable(user_objective):
+
+        try:
+            obj_val = user_objective(
+                bc=bc,
+                timeseries=timeseries,
+                params=paramtest,
+                flow_time=flow_time,
+                res=res,
+                mass_flux=mass_flux,
+            )
+
+            if not np.isfinite(obj_val):
+                return BIG_PENALTY
+
+            return obj_val
+
+        except Exception:
+            return BIG_PENALTY
+
+    else:
+        raise ValueError(f"Unknown tracer calibration target: {target}")
+
+def calibrate_tracer_system(
+    config,
+    system_name,
+    *,
+    paramnames,
+    param0s,
+    bounds,
+    target="kge",
+    objective=None,
+    flows=None,
+    solver="differential_evolution",
+    solver_method="L-BFGS-B",
+    solver_kwargs=None,
+    tol=None,
+    BIG_PENALTY=1e9,
+    prefix=None,
+    suffix=None,
+    output_dir=None,
+    save_forward_run=True,
+    plot_forward_run=False,
+):
+    """
+    Calibrate tracer/transport parameters for a single BC system.
+
+    Parameters
+    ----------
+    config : dict
+        Model configuration dictionary.
+    system_name : str
+        System / sheet name (e.g. 'A').
+    paramnames : list[str]
+        Names of parameters to calibrate.
+    param0s : list[float]
+        Initial guesses (used only for `minimize`).
+    bounds : list[tuple]
+        Bounds for parameters.
+    target : {"kge", "recovery"}
+        Calibration target.
+    objective : dict or callable, optional
+        Legacy recovery objective or custom callable.
+    flows : path or DataFrame, optional
+        Precomputed flow_time (for HPC efficiency).
+    BIG_PENALTY : float
+        Penalty value for invalid model states.
+    prefix, suffix : str
+        Optional label components for outputs.
+    output_dir : str or Path
+        Directory for calibrated params and logs.
+    save_forward_run : bool
+        Whether to run and save a forward model with calibrated params.
+    plot_forward_run : bool
+        Whether to generate plots from the forward run.
+
+    Returns
+    -------
+    dict
+        Calibration results and optional forward outputs.
+    """
+
+    t0 = time.time()
+
+    if solver_kwargs is None:
+        solver_kwargs = {}
+
+    # --------------------------------------------------
+    # Tag construction
+    # --------------------------------------------------
+    tag_parts = []
+    if prefix:
+        tag_parts.append(prefix)
+    if suffix:
+        tag_parts.append(suffix)
+    if not tag_parts:
+        tag_parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+    tag = "_".join(tag_parts)
+
+    # --------------------------------------------------
+    # Load system (NO forward run)
+    # --------------------------------------------------
+    loader_cfg = config.copy()
+    loader_cfg["flags"] = loader_cfg["flags"].copy()
+
+    for k in ("calcflow", "calcinp", "runall", "runmodel"):
+        loader_cfg["flags"][k] = False
+
+    pkg = run_bc_system(loader_cfg, system_name)
+
+    bc = pkg["bc"]
+    timeseries = pkg["timeseries"]
+
+    # --------------------------------------------------
+    # Iteration logging
+    # --------------------------------------------------
+    history = []
+
+    def iter_logger(params, obj):
+        history.append(
+            {
+                "time_s": time.time() - t0,
+                "objective": obj,
+                **{p: v for p, v in zip(paramnames, params)},
+            }
+        )
+
+    # --------------------------------------------------
+    # Run calibration
+    # --------------------------------------------------
+    res = bc.calibrate_tracer(
+        timeseries=timeseries,
+        paramnames=paramnames,
+        param0s=param0s,
+        bounds=bounds,
+        flows=flows,
+        objective=objective,
+        target=target,
+        solver=solver,
+        method=solver_method,
+        tol=tol,
+        solver_kwargs=solver_kwargs,
+        iter_logger=iter_logger,
+        BIG_PENALTY=BIG_PENALTY,
+    )
+
+    # --------------------------------------------------
+    # Write calibrated parameters
+    # --------------------------------------------------
+    params_cal = bc.params.copy()
+    for i, pname in enumerate(paramnames):
+        params_cal.loc[pname, "val"] = res.x[i]
+
+    out_dir = Path(output_dir or config["paths"]["pickle_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    params_path = out_dir / f"params_columns_calibrated_tracer_{system_name}_{tag}.csv"
+    params_cal.to_csv(params_path)
+
+    # --------------------------------------------------
+    # Save iteration history
+    # --------------------------------------------------
+    hist_df = pd.DataFrame(history)
+    hist_path = out_dir / f"tracer_calibration_history_{system_name}_{tag}.csv"
+    hist_df.to_csv(hist_path, index=False)
+
+    # --------------------------------------------------
+    # Optional forward run
+    # --------------------------------------------------
+    forward_results = None
+
+    if save_forward_run:
+
+        fwd_cfg = config.copy()
+        fwd_cfg["paths"] = fwd_cfg["paths"].copy()
+        fwd_cfg["paths"]["params_xlsx"] = str(params_path)
+
+        forward_results = run_bc_system(fwd_cfg, system_name)
+
+        if plot_forward_run:
+            bc_fwd = forward_results["bc"]
+
+            if forward_results.get("flow_time") is not None:
+                bc_fwd.plot_flows(
+                    forward_results["flow_time"],
+                    Qmeas=forward_results["timeseries"].loc[
+                        forward_results["timeseries"].time >= 0, "Qout_meas"
+                    ],
+                )
+
+            if forward_results.get("res") is not None:
+                bc_fwd.plot_Couts(
+                    forward_results["res"],
+                    forward_results["Couts"],
+                )
+
+    # --------------------------------------------------
+    # Return package
+    # --------------------------------------------------
+    return {
+        "system": system_name,
+        "solver": solver,
+        "target": target,
+        "result": res,
+        "params_path": params_path,
+        "history_path": hist_path,
+        "history": hist_df,
+        "forward_results": forward_results,
+        "runtime_s": time.time() - t0,
+    }
