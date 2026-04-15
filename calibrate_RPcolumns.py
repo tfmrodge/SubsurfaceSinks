@@ -21,7 +21,7 @@ CONFIG = {
     "colnames": ['A','B','C','P','Q','R','X','Y','Z'],
 
     "paths": {
-        "timeseries_dir": 'inputfiles/RPColumns/',
+        "timeseries_dir": 'inputfiles/RPColumns/30min',
         "locsumm_pth":  'inputfiles/RPColumns/RPColumn_BC.xlsx',
         "chemsumm_pth": 'inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',
         "params_pth":   'inputfiles/RPColumns/params_columns.xlsx',
@@ -52,8 +52,8 @@ CONFIG = {
             # units assumed to be same as timeseries.time (e.g. hours)
             # Use None to disable slicing on either end
             #None
-            "tstart": 1000,   # 1000
-            "tend": 1575     # 1575
+            "tstart": 1300,   # 1000
+            "tend": 1800     # 1575
         },
 
 
@@ -84,11 +84,11 @@ CONFIG = {
         },
 
 }
-pdb.set_trace()
+#pdb.set_trace()
 
 #Universal config
-today = 20260407 #datetime.today().strftime("%Y%m%d")
-n_workers = 2 #-1 #os.cpu_count() -5
+today = datetime.today().strftime("%Y%m%d")
+n_workers = 75#-1 #-1 #os.cpu_count() -5
 man_idx = 1
 #Flow cal config
 cal_flows =False
@@ -150,9 +150,9 @@ if cal_flows:
     )
     forward_results = out["forward_results"]
     flow_time = forward_results['flow_time']
-    outpth = f"{CONFIG['paths']['pickle_dir']}20260331_testRPcalout_{sysname}.csv"
+    outpth = f"{CONFIG['paths']['pickle_dir']}{today}_RPcalout_{sysname}.csv"
     flow_time.to_csv(outpth)
-    outfig = f"{CONFIG['paths']['pickle_dir']}20260331_testRPcalout_{sysname}.jpg"
+    outfig = f"{CONFIG['paths']['pickle_dir']}{today}_RPcalout_{sysname}.jpg"
     flow_fig = forward_results['flow_fig']
     flow_fig.savefig(outfig)
 
@@ -162,9 +162,9 @@ if cal_tracer:
         system_name=sysname,
 
         # ---- tracer parameters to calibrate ----
-        paramnames=["alpha", "Kf","thetam"],   
-        param0s=[1, 0.2,0.2],
-        bounds=[(1e-4, 50), (1e-4, 10), (1e-4, 9.9999e-1)],
+        paramnames= ["alpha", "Kf"],   #["alpha", "Kf","thetam"],   
+        param0s=[1, 0.2], #[1, 0.2,0.2],
+        bounds= [(1e-4, 50), (1e-4, 10)],#[(1e-4, 50), (1e-4, 10), (1e-4, 9.9999e-1)],
 
         # ---- objective ----
         target=TARGET_TRACER,

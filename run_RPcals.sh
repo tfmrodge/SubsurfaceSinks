@@ -1,11 +1,12 @@
 #!/bin/bash
-#SBATCH --time=02:59:0
+#SBATCH --time=23:59:0
 #SBATCH --account=def-rscholes #def-agiang01 #
-#SBATCH --ntasks-per-node=32
+#SBATCH --ntasks-per-node=192
 #SBATCH --nodes=1
-#SBATCH --mem-per-cpu=7500M
+#SBATCH --exclusive
+#SBATCH --mem=748G
 #SBATCH --array=1-9
-#SBATCH --job-name='run_RPcals'
+#SBATCH --job-name='RPcals_30min'
 # Log files (one per array task)
 #SBATCH --output=/home/tfmrodge/scratch/RPColumns/outlogs/%x_%A_%a.out
 #SBATCH --error=/home/tfmrodge/scratch/RPColumns/outlogs/%x_%A_%a.err

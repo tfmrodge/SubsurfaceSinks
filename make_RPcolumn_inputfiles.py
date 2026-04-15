@@ -19,7 +19,7 @@ import hydroeval
 
 #Testing the model
 #Load parameterization files
-pdb.set_trace()
+#pdb.set_trace()
 #Functions
 def build_soil_column_tables(dict_of_excel_sheets, colnames):
     """
@@ -366,7 +366,7 @@ if make_timeseries:
     soil_raw = build_soil_column_tables(coldata,colnames)
     chem_raw = load_chemical_sheets(coldata, chems, colnames,MDLdict,treat_pre_detection_as_zero=True)
     #Build the timeseries dataframes
-    dt = 5/60 #hrs
+    dt = 30/60 #hrs
     time_bnds = [soil_raw['A'].time.min(),soil_raw['A'].time.max()]
     time_col = 'time'
     model_ts = build_model_ready_timeseries(soil_raw,chem_raw,df_ref=ref_timeseries,
@@ -381,7 +381,7 @@ if make_timeseries:
         df.loc[:,'Bromide_Min'] = 0.
         df.loc[df.time==t_Br_spike,'Bromide_Min'] = 1.95018 #g
         df.loc[df.time==t_Br_spike,'Qin'] += 1e-4/dt
-        outname = f"inputfiles/RPColumns/InputTimeseries_{soilcol}.csv"
+        outname = f"inputfiles/RPColumns/30min/InputTimeseries_{soilcol}.csv"
         df.to_csv(outname, index=False)
 make_bcsumm = False
 if make_bcsumm:
