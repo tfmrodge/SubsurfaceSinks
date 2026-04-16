@@ -88,7 +88,7 @@ CONFIG = {
 
 #Universal config
 today = datetime.today().strftime("%Y%m%d")
-n_workers = 75#-1 #-1 #os.cpu_count() -5
+n_workers = 48 #-1 #75#-1 #-1 #os.cpu_count() -5
 man_idx = 1
 #Flow cal config
 cal_flows =False
@@ -162,9 +162,9 @@ if cal_tracer:
         system_name=sysname,
 
         # ---- tracer parameters to calibrate ----
-        paramnames= ["alpha", "Kf"],   #["alpha", "Kf","thetam"],   
-        param0s=[1, 0.2], #[1, 0.2,0.2],
-        bounds= [(1e-4, 50), (1e-4, 10)],#[(1e-4, 50), (1e-4, 10), (1e-4, 9.9999e-1)],
+        paramnames= ["alpha", "Kf","thetam"],   #["alpha", "Kf"],   #
+        param0s=[1, 0.2,0.2], #[1, 0.2], #
+        bounds= [(1e-4, 50), (1e-4, 10), (1e-4, 9.9999e-1)],#[(1e-4, 50), (1e-4, 10)],#
 
         # ---- objective ----
         target=TARGET_TRACER,
