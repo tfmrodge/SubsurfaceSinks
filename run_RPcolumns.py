@@ -16,14 +16,14 @@ from joblib import Parallel, delayed
 pdb.set_trace()
 
 CONFIG = {
-    "colnames": ['A','B'], # ['A','B','C','P','Q','R','X','Y','Z'],
+    "colnames": ['A','B','C','P','Q','R','X','Y','Z'], #['A','B'], # 
 
     "paths": {
-        "timeseries_dir": 'inputfiles/RPColumns/',
+        "timeseries_dir": 'inputfiles/RPColumns/30min/',
         "locsumm_xlsx":  'inputfiles/RPColumns/RPColumn_BC.xlsx',
         "chemsumm_xlsx": 'inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',
         "params_xlsx":   'inputfiles/RPColumns/params_columns.xlsx',
-        "pickle_dir":    "D:/OneDrive - UBC/Postdoc/Completed Projects/6PPD_BC Papers/Modeling/Pickles/"
+        "pickle_dir":    "D:/Globus/RPColumns/Pickles/"
     },
 
     "flags": {

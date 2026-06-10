@@ -166,7 +166,7 @@ def culvert_flow_est(
     res.loc[(res.hh_adj<diameter/2),'Pwet'] = (diameter/2)*res.theta
     res.loc[(res.hh_adj>=diameter/2),'Pwet'] =2*np.pi*(diameter/2)-(diameter/2)*res.theta
     res.loc[:,'R_h'] =res.area/res.Pwet #Hydraulic radius
-    #Determine flow regime and calculate discharged. Simplified from https://il.water.usgs.gov/proj/feq/fequtl98.i2h/4_7aupdate.html
+    #Determine flow regime and calculate discharge. Simplified from https://il.water.usgs.gov/proj/feq/fequtl98.i2h/4_7aupdate.html
     #Calculate culvert loss correction factor
     res.loc[:,'U'] = np.sqrt(1 / (1 + (2 * g * n_manning**2 * L_culvert) / res.R_h**(4/3)))
     res.loc[:,'flow_direction'] = np.sign(res.hh_adj-res.ht_adj) #Flow direction

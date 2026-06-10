@@ -21,7 +21,7 @@ CONFIG = {
     "colnames": ['A','B','C','P','Q','R','X','Y','Z'],
 
     "paths": {
-        "timeseries_dir": 'inputfiles/RPColumns/30min',
+        "timeseries_dir": 'inputfiles/RPColumns/30min/',
         "locsumm_pth":  'inputfiles/RPColumns/RPColumn_BC.xlsx',
         "chemsumm_pth": 'inputfiles/RPColumns/TrOC_column_CHEMSUMM.xlsx',
         "params_pth":   'inputfiles/RPColumns/params_columns.xlsx',
