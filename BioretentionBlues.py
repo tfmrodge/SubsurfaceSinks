@@ -22,6 +22,7 @@ import psutil
 from pathlib import Path
 from datetime import datetime
 import time
+from functools import partial
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 simplefilter(action="ignore", category= RuntimeWarning)
 simplefilter(action="ignore", category= FutureWarning)
@@ -1273,35 +1274,19 @@ class BCBlues(SubsurfaceSinks):
                 raise ValueError(
                     "objective must be a dict with key 'recovery' or a callable"
                 )
-    
-        # --------------------------------------------------
-        # Objective wrapper (for logging)
-        # --------------------------------------------------
-        cache = {}
-        def objective_wrapper(param):  
-            key = tuple(np.round(param, 8))
             
-            if key in cache:
-                return cache[key]
 
-            obj = optBC_tracer_objective(
-                param,
-                bc=self,
-                timeseries=timeseries,
-                paramnames=paramnames,
-                target=target_local,
-                flows=flows,
-                user_objective=user_objective,
-                BIG_PENALTY=BIG_PENALTY
-            )
-            
-            cache[key] = obj
-    
-            if iter_logger is not None:
-                iter_logger(np.asarray(param).copy(), obj)
-    
-            return obj
-    
+        objective_wrapper = partial(
+            optBC_tracer_objective,
+            bc=self,
+            timeseries=timeseries,
+            paramnames=paramnames,
+            target=target_local,
+            flows=flows,
+            user_objective=user_objective,
+            BIG_PENALTY=BIG_PENALTY,
+        )
+        
         # --------------------------------------------------
         # SOLVER DISPATCH
         # --------------------------------------------------
@@ -2052,10 +2037,12 @@ def optBC_tracer_objective(
     locsummtest = bc.locsumm.copy()
 
     for i, pname in enumerate(paramnames):
-        paramtest.loc[pname, "val"] = param[i]
-        if pname == "native_depth":
-            locsummtest.loc["native_soil", "Depth"] = param[i]
-
+        if pname in paramtest.index:
+            paramtest.loc[pname, "val"] = param[i]
+            if pname == "native_depth":
+                locsummtest.loc["native_soil", "Depth"] = param[i]
+        else:
+            print(f"{pname} not in params, so calibration may not be doing anything!")
     # --------------------------------------------------
     # Flows
     # --------------------------------------------------
@@ -2156,7 +2143,7 @@ def optBC_tracer_objective(
                     return BIG_PENALTY
 
                 # Clip to avoid optimizer instability
-                kge_val = np.clip(kge_val, -5.0, 1.0)
+                #kge_val = np.clip(kge_val, -5.0, 1.0)
 
                 KGEs.append(kge_val)
 
@@ -2402,4 +2389,3 @@ def calibrate_tracer_system(
         "forward_results": forward_results,
         "runtime_s": time.time() - t0,
     }
-``

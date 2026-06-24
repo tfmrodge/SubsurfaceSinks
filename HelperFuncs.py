@@ -75,12 +75,16 @@ def make_ppLFER(pp):
 #When slicing, reduce an index to match the display rather than keeping the
 #entire index
 def df_sliced_index(df):
-    new_index = []
-    rows = []
-    for ind, row in df.iterrows():
-        new_index.append(ind)
-        rows.append(row)
-    return pd.DataFrame(data=rows, index=pd.MultiIndex.from_tuples(new_index))
+    # new_index = []
+    # rows = []
+    # for ind, row in df.iterrows():
+    #     new_index.append(ind)
+    #     rows.append(row)
+    df = df.copy()
+    if isinstance(df.index, pd.MultiIndex):
+        df = df.copy()
+        df.index = df.index.remove_unused_levels()
+    return df #pd.DataFrame(data=rows, index=pd.MultiIndex.from_tuples(new_index))
 
 def slice_timeseries(timeseries, tstart=None, tend=None):
     """

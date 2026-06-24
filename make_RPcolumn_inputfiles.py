@@ -86,7 +86,7 @@ def build_soil_column_tables(dict_of_excel_sheets, colnames):
         df = df.merge(pH_sub, on='time', how='left')
         df = df.merge(Q_sub,  on='time', how='left')
         df = df.merge(Br_sub,  on='time', how='left')
-        #Fill 0 before tracer test for  Br to prevent interp error downstream
+        #Fill 0 before tracer test for Br to prevent interp error downstream
         df.loc[df.time<t0_tracertest,'C_Br_mg_L'] = 0.
 
         soil_raw[col] = df
@@ -137,6 +137,7 @@ def build_model_ready_timeseries(
         )
         
         # Reindex soil and chemical dataframes on union time axis
+        df = df.dropna(how = 'all')
         df = df.set_index(time_col).reindex(t_union).reset_index().rename(columns={"index": time_col})
         df_chem = df_chem.set_index(time_col).reindex(t_union).reset_index().rename(columns={"index": time_col})
         
@@ -374,11 +375,11 @@ if make_timeseries:
     #outpth = 'inputfiles/RPCol_InputTimeseries.xlsx'
     for soilcol, df in model_ts.items():
         #Add bromide spike as Br_Min and increase flow 
-        #Spke = 100 mL * 2 mg/L = 2mg = 2e-3g
+        #Spike = 100 mL * 19.5018mg/L *1000X dilution / 1000 mg/g
         #100mL*10e-6m3/mL/dt = additional Q from spike
         t_Br_spike = 1488.5 #hrs June 10 2024 1430
         df.loc[:,'Bromide_Min'] = 0.
-        df.loc[df.time==t_Br_spike,'Bromide_Min'] = 2e-3
+        df.loc[df.time==t_Br_spike,'Bromide_Min'] = 1.95018 #g
         df.loc[df.time==t_Br_spike,'Qin'] += 1e-4/dt
         outname = f"inputfiles/RPColumns/InputTimeseries_{soilcol}.csv"
         df.to_csv(outname, index=False)
