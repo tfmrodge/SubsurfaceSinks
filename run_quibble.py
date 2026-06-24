@@ -45,15 +45,6 @@ timeseries = pd.read_excel('inputfiles/QuibblePond/timeseries_qbtest.xlsx')
 #Logger offset from channel/pipe bottom
 timeseries.loc[:,'outlevel_m'] = timeseries.outlevel_m +(69.215-51.2)/100#Measured stage vs water surface 11:45 2025-03-20
 timeseries.loc[:,'inlevel_m'] = timeseries.outlevel_m +0.03 #Assumed value
-#For Qin, tailwater depth = outlevel +0.05 (higher by 0.05m at head than tail)
-timeseries.loc[:,'Qin'] = 3600*culvert_flow_est(
-        timeseries.inlevel_m+0.05, #m, series or array, from channel bottom
-        timeseries.outlevel_m, #m, series or array, from channel bottom
-        params.val.D_culvert_in, #m, culvert diameter (assumes circular)
-        params.val.L_culvert_in,#m, culvert length
-        head_offset=0., #m, measured from channel bottom 
-        tail_offset=0., #m, measured from channel bottom
-        n_manning=params.val.culvert_n)
 calc_Qout = False
 if calc_Qout==True:
     #"D:\Github\SubsurfaceSinks\inputfiles\QuibblePond\6PPDQ_CHEMSUMM.xlsx"
@@ -97,10 +88,10 @@ if calc_Qout==True:
 #timeseries.loc[:,'Qin'] = timeseries.Qin/3600*6
 locsumm.loc['water','Depth'] = timeseries.outlevel_m[0]
 #Initialize the model
-qbl =  StormPond(locsumm,chemsumm,params,timeseries,numc)
+#qbl =  StormPond(locsumm,chemsumm,params,timeseries,numc)
 #Define dX
-dx = params.val.dx
-qbsys=qbl.make_system(locsumm,params,numc,timeseries,qbdims,dx=dx)
+#dx = params.val.dx
+#qbsys=qbl.make_system(locsumm,params,numc,timeseries,qbdims,dx=dx)
 #numc = ['water', 'subsoil', 'air', 'pond'] #
 # codetime = time.time()
 # pklpath = 'D:/OneDrive - UBC/Postdoc/Active Projects/6PPD/Modeling/Pickles/'

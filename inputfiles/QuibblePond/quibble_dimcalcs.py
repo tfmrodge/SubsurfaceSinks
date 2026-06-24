@@ -125,6 +125,49 @@ def quibble_dimcalc_tables(qbdf,dimdict=None):
     qbdf.loc[:,'D_minw'] = qbl_minWD(qbdf.W,dimdict['designdepth'],dimdict['minW'])
     qbdf.loc[:,'XA_Dminw'] = qbdf.loc[:,'W_bottom']*qbdf.loc[:,'D_minw']
     return qbdf
+
+#Lets get stage-volume curve:
+    
+def stage_volume_curve(qbdf, depths, dimdict):
+    results = []
+
+    for D in depths:
+        XA_vals = qbl_XA(qbdf.W, qbdf.dX, D,
+                        dimdict['designdepth'],
+                        dimdict['berm'],
+                        dimdict['overflow'],
+                        dimdict['minW'])
+        
+        V = np.sum(XA_vals * qbdf.dX)
+
+        results.append((D, V))
+
+    return pd.DataFrame(results, columns=['Depth', 'Volume'])
+def stage_area_curve(qbdf, depths, dimdict):
+    results = []
+
+    for D in depths:
+        W = qbl_W(qbdf.W, D,
+                  dimdict['designdepth'],
+                  dimdict['berm'],
+                  dimdict['overflow'],
+                  dimdict['minW'])
+        
+        TA = W * qbdf.dX
+        A = TA.sum()
+
+        results.append((D, A))
+
+    return pd.DataFrame(results, columns=['Depth', 'Area'])
+
+pdb.set_trace()
+depths = np.linspace(0, 2.0, 50)  # up to overflow
+dimdict = {'bottom':0.0,'berm':0.9,'berm_eps':0.9001,'overflow':2.0,'minW':0.61,'designdepth':0.5}
+qbdims = pd.read_excel(r"D:\Github\SubsurfaceSinks\inputfiles\QuibblePond\Quibble_Pond.xlsx",sheet_name='PONDSUMM')
+sv_curve = stage_volume_curve(qbdims, depths, dimdict)
+sa_curve = stage_volume_curve(qbdims, depths, dimdict)
+
+
     #qbdims.loc[:,'W_bottom':].sort_ascending() 
     # #Calculate widths
     # qbdims.loc[:,'W_bottom'] = qbl_W(qbdims.W,0.0,designdepth,bermtop,overflow,minW)
@@ -136,7 +179,7 @@ def quibble_dimcalc_tables(qbdf,dimdict=None):
     # qbdims.loc[:,'W_berm'] = qbl_W(qbdims.W,bermtop,designdepth,bermtop,overflow,minW)
     # qbdims.loc[:,'W_berm_eps'] = qbl_W(qbdims.W,bermtop+0.001,designdepth,bermtop,overflow,minW) #
     # qbdims.loc[:,'W_overflow'] = qbl_W(qbdims.W,overflow,designdepth,bermtop,overflow,minW) #
-#qbdf = quibble_dimcalc_tables(qbdims)
+#
 
 
 
